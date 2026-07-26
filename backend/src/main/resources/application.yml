@@ -1,0 +1,116 @@
+# ============================================================
+# QuizGen — Configuration Spring Boot
+# ============================================================
+
+spring:
+  application:
+    name: quizgen-api
+
+  # ---- PostgreSQL ----
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/quizgen}
+    username: ${SPRING_DATASOURCE_USERNAME:quizgen_user}
+    password: ${SPRING_DATASOURCE_PASSWORD:quizgen_secret_2025}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    show-sql: false
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  # ---- Redis ----
+  data:
+    redis:
+      host: ${SPRING_DATA_REDIS_HOST:localhost}
+      port: ${SPRING_DATA_REDIS_PORT:6379}
+      password: ${SPRING_DATA_REDIS_PASSWORD:redis_secret_2025}
+
+  # ---- File upload ----
+  servlet:
+    multipart:
+      max-file-size: 50MB
+      max-request-size: 55MB
+
+  # ---- Security with Keycloak ----
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:quizgen}
+          jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:quizgen}/protocol/openid-connect/certs
+      client:
+        registration:
+          keycloak:
+            client-id: ${KEYCLOAK_CLIENT_ID:quizgen-api}
+            client-secret: ${KEYCLOAK_CLIENT_SECRET:your-client-secret}
+            scope: openid,profile,email,roles
+            authorization-grant-type: authorization_code
+            redirect-uri: "{baseUrl}/login/oauth2/code/{registrationId}"
+            client-name: Keycloak
+        provider:
+          keycloak:
+            issuer-uri: ${KEYCLOAK_URL:http://localhost:8080}/realms/${KEYCLOAK_REALM:quizgen}
+            user-name-attribute: preferred_username
+
+# ---- Keycloak Admin Configuration ----
+keycloak:
+  admin:
+    client-id: ${KEYCLOAK_ADMIN_CLIENT_ID:admin-cli}
+    client-secret: ${KEYCLOAK_ADMIN_CLIENT_SECRET:your-admin-secret}
+  realm: ${KEYCLOAK_REALM:quizgen}
+  auth-server-url: ${KEYCLOAK_URL:http://localhost:8080}
+  resource: ${KEYCLOAK_CLIENT_ID:quizgen-api}
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET:your-client-secret}
+  # Optional: Configure Keycloak token settings
+  token:
+    minimum-time-to-live: 30
+    # This is the time in seconds before token expiry to refresh
+
+# ---- MinIO ----
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minio_secret_2025}
+  bucket:
+    documents: ${MINIO_BUCKET_DOCUMENTS:quizgen-documents}
+    exports: ${MINIO_BUCKET_EXPORTS:quizgen-exports}
+
+# ---- NLP Service ----
+nlp:
+  service:
+    url: ${NLP_SERVICE_URL:http://localhost:8000}
+
+# ---- Actuator ----
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics
+  endpoint:
+    health:
+      show-details: when-authorized
+
+# ---- Swagger ----
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    tags-sorter: alpha
+    operations-sorter: method
+    # For Swagger with Keycloak OAuth2
+    oauth:
+      client-id: ${KEYCLOAK_CLIENT_ID:quizgen-api}
+      client-secret: ${KEYCLOAK_CLIENT_SECRET:your-client-secret}
+      use-pkce-with-authorization-code-grant: true
+    oauth2-redirect-url: http://localhost:8080/api/v1/swagger-ui/oauth2-redirect.html
+
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
