@@ -1,0 +1,68 @@
+
+<style>
+#seq2 { padding: 8px 0; }
+</style>
+<div id="seq2"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '12px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+    actorBkg: dark ? '#085041' : '#E1F5EE',
+    actorBorder: dark ? '#5DCAA5' : '#0F6E56',
+    actorTextColor: dark ? '#9FE1CB' : '#04342C',
+    activationBkgColor: dark ? '#444441' : '#F1EFE8',
+    activationBorderColor: dark ? '#B4B2A9' : '#5F5E5A',
+    signalColor: dark ? '#c2c0b6' : '#3d3d3a',
+    noteBkgColor: dark ? '#3C3489' : '#EEEDFE',
+    noteBorderColor: dark ? '#AFA9EC' : '#534AB7',
+    noteTextColor: dark ? '#CECBF6' : '#26215C',
+  },
+});
+const { svg } = await mermaid.render('seq2-svg', `sequenceDiagram
+    actor S as Étudiant
+    participant F as Frontend React
+    participant B as Spring Boot API
+    participant DB as PostgreSQL
+    participant P as FastAPI (NLP)
+
+    S->>F: Saisir code d'accès
+    F->>B: GET /api/v1/sessions?code=XXX (JWT)
+    B->>DB: Vérifier session active
+    DB-->>B: Session + Quiz + Questions
+    B-->>F: 200 OK (questions, durée)
+    F-->>S: Afficher examen + chronomètre
+
+    loop Pour chaque question
+        S->>F: Répondre à la question
+        F->>F: Sauvegarder en local (state)
+    end
+
+    S->>F: Soumettre l'examen
+    F->>B: POST /api/v1/sessions/{id}/attempt
+
+    activate B
+    B->>B: Corriger QCM (comparaison directe)
+    B->>P: POST /evaluate (réponses ouvertes)
+    activate P
+    P->>P: BERTScore (réponse vs modèle)
+    P-->>B: Scores sémantiques
+    deactivate P
+    B->>DB: Sauvegarder Attempt (score, durée, réponses)
+    B->>DB: Mettre à jour Analytics
+    deactivate B
+
+    B-->>F: 200 OK (résultats détaillés)
+    F-->>S: Afficher score + corrections
+`);
+document.getElementById('seq2').innerHTML = svg;
+</script>

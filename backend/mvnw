@@ -1,0 +1,30 @@
+#!/bin/sh
+# ----------------------------------------------------------------------------
+# Maven Wrapper Startup Script
+# ----------------------------------------------------------------------------
+
+# OS specific support
+set -e
+
+# Set MAVEN_OPTS
+MAVEN_OPTS="${MAVEN_OPTS} -Dmaven.repo.local=${MAVEN_REPO_LOCAL:-$HOME/.m2/repository}"
+
+# Use full path to mvnw if available
+if [ -n "$M2_HOME" ] ; then
+  if [ -x "$M2_HOME/bin/mvn" ] ; then
+    exec "$M2_HOME/bin/mvn" "$@"
+  fi
+fi
+
+# Use the Maven Wrapper if available
+if [ -f .mvn/wrapper/maven-wrapper.jar ] ; then
+  exec java $MAVEN_OPTS -classpath .mvn/wrapper/maven-wrapper.jar org.apache.maven.wrapper.MavenWrapperMain "$@"
+else
+  # Fallback to system maven
+  if command -v mvn >/dev/null 2>&1; then
+    exec mvn "$@"
+  else
+    echo "ERROR: Maven not found. Please install Maven or use the Maven Wrapper."
+    exit 1
+  fi
+fi
