@@ -1,0 +1,174 @@
+
+<style>
+#class-diagram { padding: 8px 0; }
+</style>
+<div id="class-diagram"></div>
+<script type="module">
+import mermaid from 'https://esm.sh/mermaid@11/dist/mermaid.esm.min.mjs';
+const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+await document.fonts.ready;
+mermaid.initialize({
+  startOnLoad: false,
+  theme: 'base',
+  fontFamily: '"Anthropic Sans", sans-serif',
+  themeVariables: {
+    darkMode: dark,
+    fontSize: '13px',
+    fontFamily: '"Anthropic Sans", sans-serif',
+    lineColor: dark ? '#9c9a92' : '#73726c',
+    textColor: dark ? '#c2c0b6' : '#3d3d3a',
+  },
+});
+const { svg } = await mermaid.render('class-svg', `classDiagram
+    direction TB
+
+    class User {
+        +Long id
+        +String email
+        +String passwordHash
+        +String firstName
+        +String lastName
+        +Role role
+        +LocalDateTime createdAt
+        +Boolean active
+        +register()
+        +login()
+        +updateProfile()
+    }
+
+    class Document {
+        +Long id
+        +String filename
+        +String originalName
+        +String contentText
+        +Long fileSize
+        +LocalDateTime uploadedAt
+        +Long uploadedBy
+        +upload()
+        +extractText()
+        +getKeywords()
+    }
+
+    class Quiz {
+        +Long id
+        +String title
+        +String description
+        +Difficulty difficulty
+        +Integer nbQuestions
+        +JsonNode config
+        +LocalDateTime createdAt
+        +Long documentId
+        +Long createdBy
+        +generate()
+        +update()
+        +export()
+    }
+
+    class Question {
+        +Long id
+        +QuestionType type
+        +String text
+        +JsonNode options
+        +String correctAnswer
+        +String explanation
+        +String hint
+        +Integer orderIndex
+        +Long quizId
+        +regenerate()
+        +updateContent()
+    }
+
+    class Session {
+        +Long id
+        +LocalDateTime startTime
+        +LocalDateTime endTime
+        +String accessCode
+        +Integer duration
+        +Boolean active
+        +Long quizId
+        +Long createdBy
+        +create()
+        +close()
+        +getResults()
+    }
+
+    class Attempt {
+        +Long id
+        +Double score
+        +Integer duration
+        +JsonNode answers
+        +LocalDateTime submittedAt
+        +Long sessionId
+        +Long userId
+        +submit()
+        +evaluate()
+        +getSummary()
+    }
+
+    class Analytics {
+        +Long id
+        +Long quizId
+        +Double avgScore
+        +Double avgTime
+        +JsonNode questionStats
+        +LocalDateTime computedAt
+        +compute()
+        +exportPdf()
+        +exportCsv()
+    }
+
+    class Role {
+        <<enumeration>>
+        ENSEIGNANT
+        ETUDIANT
+        ADMIN
+    }
+
+    class QuestionType {
+        <<enumeration>>
+        QCM
+        OUVERTE
+        EXERCICE
+    }
+
+    class Difficulty {
+        <<enumeration>>
+        FACILE
+        MOYEN
+        DIFFICILE
+    }
+
+    User "1" --> "*" Quiz : crée
+    User "1" --> "*" Attempt : passe
+    User "1" --> "*" Document : importe
+    Document "1" --> "*" Quiz : génère
+    Quiz "1" --> "*" Question : contient
+    Quiz "1" --> "*" Session : expose
+    Quiz "1" --> "0..1" Analytics : mesure
+    Session "1" --> "*" Attempt : reçoit
+    User ..> Role
+    Question ..> QuestionType
+    Quiz ..> Difficulty
+`);
+document.getElementById('class-diagram').innerHTML = svg;
+
+document.querySelectorAll('#class-diagram svg .node').forEach(node => {
+  const firstPath = node.querySelector('path[d]');
+  if (!firstPath) return;
+  const d = firstPath.getAttribute('d');
+  const nums = d.match(/-?[\d.]+/g)?.map(Number);
+  if (!nums || nums.length < 8) return;
+  const xs = [nums[0], nums[2], nums[4], nums[6]];
+  const ys = [nums[1], nums[3], nums[5], nums[7]];
+  const x = Math.min(...xs), y = Math.min(...ys);
+  const w = Math.max(...xs) - x, h = Math.max(...ys) - y;
+  const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect');
+  rect.setAttribute('x', x); rect.setAttribute('y', y);
+  rect.setAttribute('width', w); rect.setAttribute('height', h);
+  rect.setAttribute('rx', '8');
+  for (const a of ['fill', 'stroke', 'stroke-width', 'class', 'style']) {
+    if (firstPath.hasAttribute(a)) rect.setAttribute(a, firstPath.getAttribute(a));
+  }
+  firstPath.replaceWith(rect);
+});
+</script>
