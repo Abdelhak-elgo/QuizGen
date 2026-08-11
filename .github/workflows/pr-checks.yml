@@ -1,0 +1,45 @@
+name: PR Checks
+
+on:
+  pull_request:
+    branches: [main, develop]
+
+jobs:
+  # Vérifie que le pom.xml est valide et que le projet compile sans erreur
+  compile-check:
+    name: Compile check
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v4
+        with:
+          java-version: "21"
+          distribution: temurin
+          cache: maven
+
+      - name: Compile (no tests)
+        working-directory: backend
+        run: mvn -B compile --no-transfer-progress
+
+  # Vérifie le formattage et les conventions Python pour le NLP
+  python-lint:
+    name: Python lint (NLP service)
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install ruff
+        run: pip install ruff
+
+      - name: Run ruff linter
+        working-directory: nlp-service
+        run: ruff check . --ignore E501 || true
