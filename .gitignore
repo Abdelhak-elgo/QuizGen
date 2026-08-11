@@ -1,49 +1,48 @@
-# See https://docs.github.com/en/get-started/getting-started-with-git/ignoring-files for more about ignoring files.
+# Environment
+.env
+!.env.example
 
-# compiled output
-dist
-tmp
-out-tsc
-*.tsbuildinfo
-.expo
-.expo-shared
+# Maven
+backend/target/
+backend/.mvn/
+!backend/.mvn/wrapper/maven-wrapper.jar
+backend/mvnw
+backend/mvnw.cmd
 
-# dependencies
-node_modules
+# Python
+nlp-service/__pycache__/
+nlp-service/.venv/
+nlp-service/*.egg-info/
+nlp-service/.pytest_cache/
+nlp-service/htmlcov/
+nlp-service/.coverage
+nlp-service/dist/
 
-# IDEs and editors
-/.idea
-.project
-.classpath
-.c9/
-*.launch
-.settings/
-*.sublime-workspace
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
 
-# IDE - VSCode
-.vscode/*
-!.vscode/settings.json
-!.vscode/tasks.json
-!.vscode/launch.json
-!.vscode/extensions.json
+# IDE
+.idea/
+.vscode/
+*.iml
 
-# misc
-/.sass-cache
-/connect.lock
-/coverage
-/libpeerconnection.log
-npm-debug.log
-yarn-error.log
-testem.log
-/typings
-
-# System Files
+# OS
 .DS_Store
 Thumbs.db
 
-.cursor/rules/nx-rules.mdc
-.github/instructions/nx.instructions.md
+# Docker volumes (data persistée localement)
+postgres-data/
+minio-data/
+redis-data/
+ollama-data/
 
-# Replit
-.cache/
-.local/
+# Logs
+*.log
+logs/
+
+# Test reports
+backend/target/surefire-reports/
+nlp-service/htmlcov/

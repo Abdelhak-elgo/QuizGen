@@ -1,0 +1,53 @@
+server:
+  port: 8080
+  servlet:
+    context-path: /api/v1
+
+spring:
+  application:
+    name: quizgen-backend
+
+  datasource:
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:quizgen}
+    username: ${DB_USER:quizgen}
+    password: ${DB_PASS:quizgen_secret_2025}
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+        format_sql: true
+    show-sql: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:quizgen}
+          jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:quizgen}/protocol/openid-connect/certs
+
+minio:
+  url: ${MINIO_URL:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:minioadmin}
+  secret-key: ${MINIO_SECRET_KEY:minio_secret_2025}
+  bucket-documents: ${MINIO_BUCKET_DOCUMENTS:documents}
+  bucket-exports: ${MINIO_BUCKET_EXPORTS:exports}
+
+springdoc:
+  api-docs:
+    path: /api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    oauth2-redirect-url: /swagger-ui/oauth2-redirect.html
+  info:
+    title: QuizGen API
+    description: API REST pour la génération automatique de quiz pédagogiques
+    version: 1.0.0
+
+logging:
+  level:
+    ma.quizgen: INFO
+    org.springframework.security: WARN
