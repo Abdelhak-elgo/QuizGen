@@ -1,22 +1,37 @@
 openapi: 3.1.0
 info:
-  # Do not change the title, if the title changes, the import paths will be broken
   title: Api
-  version: 0.1.0
-  description: API specification
+  version: 1.0.0
+  description: QuizGen API — Spring Boot backend (Keycloak JWT auth)
 servers:
-  - url: /api
-    description: Base API path
+  - url: /api/v1
+    description: Spring Boot API (proxied via Vite)
 tags:
   - name: health
-    description: Health operations
+    description: Health check
+  - name: users
+    description: User profile management
+  - name: documents
+    description: PDF document management
+  - name: quizzes
+    description: Quiz creation and management
+  - name: sessions
+    description: Exam session management
+  - name: attempts
+    description: Student exam attempts
+  - name: analytics
+    description: Quiz and student analytics
+
+security:
+  - bearerAuth: []
+
 paths:
   /healthz:
     get:
       operationId: healthCheck
       tags: [health]
       summary: Health check
-      description: Returns server health status
+      security: []
       responses:
         "200":
           description: Healthy
@@ -24,13 +39,649 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/HealthStatus"
+
+  # ── Users ──────────────────────────────────────────────────────────────────
+  /users/sync:
+    post:
+      operationId: syncUser
+      tags: [users]
+      summary: Synchronise le profil Keycloak en base
+      responses:
+        "200":
+          description: User synced
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users/me:
+    get:
+      operationId: getMe
+      tags: [users]
+      summary: Profil de l'utilisateur connecté
+      responses:
+        "200":
+          description: Current user
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/User"
+
+  /users:
+    get:
+      operationId: listUsers
+      tags: [users]
+      summary: Liste paginée des utilisateurs (ADMIN)
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 20 } }
+      responses:
+        "200":
+          description: Paginated users
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UserPage"
+
+  # ── Documents ──────────────────────────────────────────────────────────────
+  /documents:
+    get:
+      operationId: listDocuments
+      tags: [documents]
+      summary: Mes documents PDF
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        "200":
+          description: Paginated documents
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentPage"
+
+  /documents/upload:
+    post:
+      operationId: uploadDocument
+      tags: [documents]
+      summary: Upload un fichier PDF
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              $ref: "#/components/schemas/DocumentUpload"
+      responses:
+        "200":
+          description: Document uploaded
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DocumentUploadResponse"
+
+  /documents/{id}:
+    get:
+      operationId: getDocument
+      tags: [documents]
+      summary: Détail d'un document
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Document detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Document"
+    delete:
+      operationId: deleteDocument
+      tags: [documents]
+      summary: Supprimer un document
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Deleted
+
+  /documents/{id}/download-url:
+    get:
+      operationId: getDocumentDownloadUrl
+      tags: [documents]
+      summary: URL présignée MinIO pour télécharger le PDF
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Download URL
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/DownloadUrl"
+
+  # ── Quizzes ────────────────────────────────────────────────────────────────
+  /quizzes:
+    get:
+      operationId: listQuizzes
+      tags: [quizzes]
+      summary: Mes quiz
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        "200":
+          description: Paginated quizzes
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizPage"
+    post:
+      operationId: createQuiz
+      tags: [quizzes]
+      summary: Créer un quiz (déclenche la génération NLP)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizInput"
+      responses:
+        "201":
+          description: Quiz created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+
+  /quizzes/{id}:
+    get:
+      operationId: getQuiz
+      tags: [quizzes]
+      summary: Détail d'un quiz avec ses questions
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Quiz detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+    delete:
+      operationId: deleteQuiz
+      tags: [quizzes]
+      summary: Supprimer un quiz
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Deleted
+
+  /quizzes/{id}/questions:
+    put:
+      operationId: updateQuizQuestions
+      tags: [quizzes]
+      summary: Éditer les questions et publier le quiz
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/QuizQuestionsUpdate"
+      responses:
+        "200":
+          description: Updated quiz
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+
+  # ── Sessions ───────────────────────────────────────────────────────────────
+  /sessions:
+    get:
+      operationId: listSessions
+      tags: [sessions]
+      summary: Mes sessions
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        "200":
+          description: Paginated sessions
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionPage"
+    post:
+      operationId: createSession
+      tags: [sessions]
+      summary: Créer une session d'examen
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionInput"
+      responses:
+        "201":
+          description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{id}:
+    get:
+      operationId: getSession
+      tags: [sessions]
+      summary: Détail d'une session
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Session detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/{id}/join:
+    post:
+      operationId: joinSession
+      tags: [sessions]
+      summary: Rejoindre une session (étudiant)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionJoin"
+      responses:
+        "200":
+          description: Attempt created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attempt"
+
+  /sessions/{id}/cancel:
+    delete:
+      operationId: cancelSession
+      tags: [sessions]
+      summary: Annuler une session
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "204":
+          description: Cancelled
+
+  # ── Attempts ───────────────────────────────────────────────────────────────
+  /attempts/my:
+    get:
+      operationId: listMyAttempts
+      tags: [attempts]
+      summary: Historique de mes tentatives
+      parameters:
+        - { name: page, in: query, schema: { type: integer, default: 0 } }
+        - { name: size, in: query, schema: { type: integer, default: 10 } }
+      responses:
+        "200":
+          description: Paginated attempts
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttemptPage"
+
+  /attempts/{id}:
+    get:
+      operationId: getAttempt
+      tags: [attempts]
+      summary: Détail d'une tentative
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Attempt detail
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attempt"
+
+  /attempts/{id}/submit:
+    post:
+      operationId: submitAttempt
+      tags: [attempts]
+      summary: Soumettre les réponses et obtenir le score
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AttemptSubmit"
+      responses:
+        "200":
+          description: Scored attempt
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Attempt"
+
+  # ── Analytics ──────────────────────────────────────────────────────────────
+  /analytics/quiz/{quizId}:
+    get:
+      operationId: getQuizAnalytics
+      tags: [analytics]
+      summary: Statistiques d'un quiz
+      parameters:
+        - { name: quizId, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Quiz analytics
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/QuizAnalytics"
+
+  /analytics/student:
+    get:
+      operationId: getStudentDashboard
+      tags: [analytics]
+      summary: Tableau de bord étudiant
+      responses:
+        "200":
+          description: Student dashboard
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/StudentDashboard"
+
 components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
   schemas:
     HealthStatus:
       type: object
+      required: [status]
       properties:
-        status:
-          type: string
-      required:
-        - status
+        status: { type: string }
 
+    # ── Users ──────────────────────────────────────────────────────────────
+    User:
+      type: object
+      required: [id, email, role, isActive]
+      properties:
+        id: { type: string, format: uuid }
+        keycloakId: { type: string }
+        email: { type: string }
+        firstName: { type: ["string", "null"] }
+        lastName: { type: ["string", "null"] }
+        role: { type: string, enum: [ENSEIGNANT, ETUDIANT, ADMIN] }
+        isActive: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    UserPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content: { type: array, items: { $ref: "#/components/schemas/User" } }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        last: { type: boolean }
+
+    # ── Documents ──────────────────────────────────────────────────────────
+    Document:
+      type: object
+      required: [id, originalFilename, bucketName, objectKey, isProcessed]
+      properties:
+        id: { type: string, format: uuid }
+        originalFilename: { type: string }
+        bucketName: { type: string }
+        objectKey: { type: string }
+        fileSize: { type: ["integer", "null"] }
+        pageCount: { type: ["integer", "null"] }
+        isProcessed: { type: boolean }
+        createdAt: { type: string, format: date-time }
+
+    DocumentPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content: { type: array, items: { $ref: "#/components/schemas/Document" } }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        last: { type: boolean }
+
+    DocumentUpload:
+      type: object
+      required: [file]
+      properties:
+        file: { type: string, format: binary }
+
+    DocumentUploadResponse:
+      type: object
+      required: [id, originalFilename, objectKey, message]
+      properties:
+        id: { type: string, format: uuid }
+        originalFilename: { type: string }
+        objectKey: { type: string }
+        message: { type: string }
+
+    DownloadUrl:
+      type: object
+      required: [url]
+      properties:
+        url: { type: string }
+
+    # ── Quizzes ────────────────────────────────────────────────────────────
+    Question:
+      type: object
+      required: [id, type, content, correctAnswer, difficulty, position]
+      properties:
+        id: { type: string, format: uuid }
+        type: { type: string, enum: [QCM, OUVERTE, EXERCICE] }
+        content: { type: string }
+        options: { type: ["array", "null"], items: { type: string } }
+        correctAnswer: { type: string }
+        explanation: { type: ["string", "null"] }
+        difficulty: { type: string, enum: [FACILE, MOYEN, DIFFICILE] }
+        keywords: { type: array, items: { type: string } }
+        position: { type: integer }
+
+    Quiz:
+      type: object
+      required: [id, title, difficulty, nbQuestions, quizStatus]
+      properties:
+        id: { type: string, format: uuid }
+        documentId: { type: string, format: uuid }
+        documentName: { type: string }
+        teacherId: { type: string, format: uuid }
+        teacherName: { type: string }
+        title: { type: string }
+        description: { type: ["string", "null"] }
+        difficulty: { type: string, enum: [FACILE, MOYEN, DIFFICILE] }
+        nbQuestions: { type: integer }
+        quizStatus: { type: string, enum: [DRAFT, REVIEWING, PUBLISHED, ARCHIVED] }
+        nlpTaskId: { type: ["string", "null"] }
+        questions: { type: array, items: { $ref: "#/components/schemas/Question" } }
+        createdAt: { type: string, format: date-time }
+        updatedAt: { type: string, format: date-time }
+
+    QuizPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content: { type: array, items: { $ref: "#/components/schemas/Quiz" } }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        last: { type: boolean }
+
+    QuizInput:
+      type: object
+      required: [documentId, title, difficulty, nbQuestions]
+      properties:
+        documentId: { type: string, format: uuid }
+        title: { type: string, minLength: 3, maxLength: 255 }
+        description: { type: string }
+        difficulty: { type: string, enum: [FACILE, MOYEN, DIFFICILE] }
+        nbQuestions: { type: integer, minimum: 3, maximum: 25 }
+        questionTypes:
+          type: array
+          items: { type: string, enum: [QCM, OUVERTE, EXERCICE] }
+
+    QuestionUpdateItem:
+      type: object
+      required: [type, content, correctAnswer, difficulty]
+      properties:
+        id: { type: ["string", "null"], format: uuid }
+        type: { type: string, enum: [QCM, OUVERTE, EXERCICE] }
+        content: { type: string }
+        options: { type: ["array", "null"], items: { type: string } }
+        correctAnswer: { type: string }
+        explanation: { type: ["string", "null"] }
+        difficulty: { type: string, enum: [FACILE, MOYEN, DIFFICILE] }
+        keywords: { type: array, items: { type: string } }
+        position: { type: ["integer", "null"] }
+
+    QuizQuestionsUpdate:
+      type: object
+      required: [questions, publish]
+      properties:
+        questions: { type: array, items: { $ref: "#/components/schemas/QuestionUpdateItem" } }
+        publish: { type: boolean }
+
+    # ── Sessions ───────────────────────────────────────────────────────────
+    Session:
+      type: object
+      required: [id, quizId, quizTitle, startTime, endTime, sessionStatus]
+      properties:
+        id: { type: string, format: uuid }
+        quizId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        teacherId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        accessCode: { type: ["string", "null"] }
+        sessionStatus: { type: string, enum: [SCHEDULED, OPEN, CLOSED, CANCELLED] }
+        attemptCount: { type: integer }
+        createdAt: { type: string, format: date-time }
+
+    SessionPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content: { type: array, items: { $ref: "#/components/schemas/Session" } }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        last: { type: boolean }
+
+    SessionInput:
+      type: object
+      required: [quizId, startTime, endTime]
+      properties:
+        quizId: { type: string, format: uuid }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        accessCode: { type: ["string", "null"] }
+
+    SessionJoin:
+      type: object
+      properties:
+        accessCode: { type: ["string", "null"] }
+
+    # ── Attempts ───────────────────────────────────────────────────────────
+    Attempt:
+      type: object
+      required: [id, sessionId, studentId, attemptStatus]
+      properties:
+        id: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        studentId: { type: string, format: uuid }
+        studentName: { type: string }
+        answers: { type: ["object", "null"] }
+        score: { type: ["integer", "null"] }
+        maxScore: { type: ["integer", "null"] }
+        scorePercent: { type: ["number", "null"] }
+        attemptStatus: { type: string, enum: [IN_PROGRESS, SUBMITTED, EXPIRED] }
+        startedAt: { type: string, format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+
+    AttemptPage:
+      type: object
+      required: [content, page, size, totalElements, totalPages, last]
+      properties:
+        content: { type: array, items: { $ref: "#/components/schemas/Attempt" } }
+        page: { type: integer }
+        size: { type: integer }
+        totalElements: { type: integer }
+        totalPages: { type: integer }
+        last: { type: boolean }
+
+    AttemptSubmit:
+      type: object
+      required: [answers]
+      properties:
+        answers:
+          type: object
+          additionalProperties: { type: string }
+
+    # ── Analytics ──────────────────────────────────────────────────────────
+    QuestionStat:
+      type: object
+      required: [questionId, content, totalAnswers, correctAnswers, correctRate]
+      properties:
+        questionId: { type: string, format: uuid }
+        content: { type: string }
+        totalAnswers: { type: integer }
+        correctAnswers: { type: integer }
+        correctRate: { type: number }
+
+    QuizAnalytics:
+      type: object
+      required: [quizId, quizTitle, totalAttempts, averageScore, successRate, questionStats]
+      properties:
+        quizId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        totalAttempts: { type: integer }
+        averageScore: { type: number }
+        successRate: { type: number }
+        questionStats: { type: array, items: { $ref: "#/components/schemas/QuestionStat" } }
+
+    AttemptSummary:
+      type: object
+      required: [attemptId, sessionId, quizTitle, status]
+      properties:
+        attemptId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        score: { type: ["integer", "null"] }
+        maxScore: { type: ["integer", "null"] }
+        scorePercent: { type: ["number", "null"] }
+        status: { type: string }
+        completedAt: { type: ["string", "null"], format: date-time }
+
+    StudentDashboard:
+      type: object
+      required: [studentId, studentName, totalAttempts, averageScore, recentAttempts]
+      properties:
+        studentId: { type: string, format: uuid }
+        studentName: { type: string }
+        totalAttempts: { type: integer }
+        averageScore: { type: number }
+        recentAttempts: { type: array, items: { $ref: "#/components/schemas/AttemptSummary" } }
