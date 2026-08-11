@@ -1,0 +1,28 @@
+kind = "web"
+previewPath = "/frontend/"
+title = "QuizGen Frontend"
+description = "Interface React 18 + TypeScript + TailwindCSS multi-rôles pour QuizGen. Authentification OAuth2 Keycloak, espace enseignant (upload PDF, génération quiz NLP, révision questions, gestion sessions, analytics Recharts) et espace étudiant (mode examen chronométré, résultats détaillés, historique)."
+version = "1.0.0"
+id = "artifacts/frontend"
+router = "path"
+
+[[services]]
+name = "web"
+paths = [ "/frontend/" ]
+localPort = 18130
+
+[services.development]
+run = "pnpm --filter @workspace/frontend run dev"
+
+[services.production]
+build = [ "pnpm", "--filter", "@workspace/frontend", "run", "build" ]
+serve = "static"
+publicDir = "artifacts/frontend/dist/public"
+
+[[services.production.rewrites]]
+from = "/*"
+to = "/index.html"
+
+[services.env]
+PORT = "18130"
+BASE_PATH = "/frontend/"
