@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { Progress } from '@/components/ui/progress';
 import {
   ArrowLeft,
+  BookOpen,
   CheckCircle2,
   LayoutDashboard,
   Target,
@@ -26,6 +27,11 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
 // ── Types locaux pour les détails BERTScore ────────────────────────────────────
+interface EvidenceChunk {
+  text: string;
+  similarity_score: number;
+}
+
 interface BertScoreDetail {
   questionId: string;
   questionContent: string;
@@ -37,6 +43,7 @@ interface BertScoreDetail {
   partialScore: number;
   label: 'CORRECT' | 'PARTIEL' | 'INCORRECT';
   model: string;
+  evidenceChunk?: EvidenceChunk | null;
 }
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
@@ -53,6 +60,51 @@ function BertScoreBadge({ label, f1 }: { label: string; f1: number }) {
       {cfg.icon}
       {label} — F1 {(f1 * 100).toFixed(0)}%
     </span>
+  );
+}
+
+/**
+ * Bloc "📖 Passage source" — Evidence RAG.
+ *
+ * Affiché quand ChromaDB a pu retrouver le passage du document source
+ * correspondant à la réponse de l'étudiant. Permet une correction explicable :
+ * l'étudiant voit POURQUOI sa réponse est PARTIELLE ou INCORRECTE.
+ *
+ * La bordure gauche reprend la couleur du label BERTScore pour un repère visuel
+ * immédiat (vert = CORRECT, ambre = PARTIEL, rouge = INCORRECT).
+ */
+function EvidenceBlock({
+  evidence,
+  label,
+}: {
+  evidence: EvidenceChunk;
+  label: string;
+}) {
+  const borderColor =
+    label === 'CORRECT'   ? 'border-l-green-400' :
+    label === 'PARTIEL'   ? 'border-l-amber-400' :
+                            'border-l-red-400';
+
+  const similarityPct = Math.round((evidence.similarity_score ?? 0) * 100);
+
+  return (
+    <div className={`mt-3 pl-4 border-l-4 ${borderColor} bg-slate-50 border border-slate-200 rounded-r-md p-4 space-y-2`}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-1.5 text-slate-600">
+          <BookOpen size={14} className="shrink-0" />
+          <span className="text-xs font-semibold uppercase tracking-wider">Passage source</span>
+        </div>
+        <span className="text-xs text-slate-500 tabular-nums">
+          Similarité : <span className="font-semibold text-slate-700">{similarityPct}%</span>
+        </span>
+      </div>
+      <p className="text-sm text-slate-700 leading-relaxed line-clamp-6">
+        {evidence.text}
+      </p>
+      <p className="text-xs text-slate-400 italic">
+        Ce passage est extrait du document source générant ce quiz.
+      </p>
+    </div>
   );
 }
 
@@ -96,6 +148,11 @@ function BertScorePanel({ detail }: { detail: BertScoreDetail }) {
       <p className="text-xs text-violet-500 italic">
         Modèle : {detail.model} — Seuil validation : F1 ≥ 70%
       </p>
+
+      {/* Passage source Evidence RAG — affiché uniquement quand ChromaDB a trouvé un passage */}
+      {detail.evidenceChunk?.text && (
+        <EvidenceBlock evidence={detail.evidenceChunk} label={detail.label} />
+      )}
     </div>
   );
 }

@@ -118,6 +118,19 @@ if HAS_PROMETHEUS:
         ["status"],   # success | failure
     )
 
+    # Evidence RAG (BERTScore explicable)
+    EVIDENCE_SIMILARITY_SCORE = Histogram(
+        "quizgen_nlp_evidence_similarity_score",
+        "Score de similarité cosinus entre la réponse étudiant et le passage source (Evidence RAG)",
+        buckets=[0.05, 0.10, 0.20, 0.30, 0.40, 0.50, 0.60, 0.70, 0.80, 0.90, 0.95, 1.0],
+    )
+
+    EVIDENCE_RETRIEVAL_TOTAL = Counter(
+        "quizgen_nlp_evidence_retrieval_total",
+        "Nombre de récupérations d'evidence RAG pour la correction BERTScore",
+        ["result"],   # found | not_found
+    )
+
 
 # ── Context managers pour mesures ────────────────────────────────────────────
 
@@ -194,6 +207,21 @@ def set_celery_active_tasks(count: int) -> None:
 def record_celery_task_completed(success: bool) -> None:
     if HAS_PROMETHEUS:
         CELERY_TASKS_COMPLETED.labels(status="success" if success else "failure").inc()
+
+
+def record_evidence_retrieved(similarity: float, found: bool) -> None:
+    """
+    Enregistre une récupération d'evidence RAG.
+
+    Args:
+        similarity: Score de similarité cosinus [0, 1] (ignoré si found=False).
+        found:      True si un passage a été trouvé, False sinon.
+    """
+    if not HAS_PROMETHEUS:
+        return
+    EVIDENCE_RETRIEVAL_TOTAL.labels(result="found" if found else "not_found").inc()
+    if found and similarity > 0:
+        EVIDENCE_SIMILARITY_SCORE.observe(similarity)
 
 
 # ── Middleware FastAPI ──────────────────────────────────────────────────────────
