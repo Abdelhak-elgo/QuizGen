@@ -46,3 +46,26 @@ logs/
 # Test reports
 backend/target/surefire-reports/
 nlp-service/htmlcov/
+
+# E2E Playwright
+e2e/node_modules/
+e2e/playwright-report/
+e2e/results/
+e2e/test-results/
+e2e/.cache/
+e2e/fixtures/sample.pdf
+
+# Évaluation IA (corpus non versionné — contient des PDFs pédagogiques)
+evaluation/corpus/*/
+!evaluation/corpus/.gitkeep
+
+# Scripts de performance
+scripts/performance-report.txt
+
+# Docker Compose prod (peut contenir des valeurs d'env)
+.env.prod
+
+# Monitoring data
+monitoring/grafana/data/
+prometheus-data/
+grafana-data/
