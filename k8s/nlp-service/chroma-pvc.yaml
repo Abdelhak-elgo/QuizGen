@@ -1,0 +1,22 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: chroma-data-pvc
+  namespace: quizgen
+  labels:
+    app.kubernetes.io/part-of: quizgen-platform
+    component: rag-store
+  annotations:
+    description: >
+      Volume partagé pour ChromaDB (RAG store).
+      Monté en ReadWriteMany sur nlp-service et nlp-worker afin que les deux
+      pods accèdent au même index vectoriel.
+      Nécessite un StorageClass supportant ReadWriteMany (NFS, CephFS, GCS, EFS…).
+      En dev mono-nœud, ReadWriteOnce est accepté (un seul pod à la fois).
+spec:
+  accessModes:
+    - ReadWriteMany        # Partage entre nlp-service + nlp-worker (toutes répliques)
+  resources:
+    requests:
+      storage: 5Gi
+  # storageClassName: nfs  # Décommenter et adapter selon le cluster

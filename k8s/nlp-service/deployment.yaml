@@ -63,6 +63,9 @@ spec:
               port: 8000
             initialDelaySeconds: 40
             periodSeconds: 30
+          volumeMounts:
+            - name: chroma-data
+              mountPath: /data/chroma
           resources:
             requests:
               memory: "2Gi"    # bert-score + spacy en mémoire
@@ -70,3 +73,7 @@ spec:
             limits:
               memory: "6Gi"
               cpu: "2000m"
+      volumes:
+        - name: chroma-data
+          persistentVolumeClaim:
+            claimName: chroma-data-pvc
