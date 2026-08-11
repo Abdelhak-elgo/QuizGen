@@ -21,7 +21,7 @@ Référence :
 import logging
 import re
 from dataclasses import dataclass
-from typing import List, Optional
+from typing import List, Optional  # noqa: F401 — Optional used in score_questions signature
 
 import numpy as np
 
@@ -248,23 +248,29 @@ def score_questions(
     embedding_model=None,
     quality_threshold: float = QUALITY_THRESHOLD,
     answerability_threshold: float = ANSWERABILITY_THRESHOLD,
+    rag_context: Optional[List[str]] = None,
 ) -> List[ScoredQuestion]:
     """
     Score et filtre une liste de questions générées.
 
     Pipeline :
       1. Answerability : la réponse est-elle ancrée dans le texte source ?
+         Si rag_context fourni, l'answerability est calculée sur la concaténation
+         (chunk principal + chunks RAG) → seuil effectivement moins strict pour
+         les questions qui exploitent le contexte cross-document.
       2. Linguistic    : la question est-elle bien formée ?
       3. Distinctiveness : est-elle différente des autres ?
       4. Score composite : 0.50×A + 0.30×L + 0.20×D
       5. Filtre : rejeter si score < quality_threshold ou answerability trop faible
 
     Args:
-        questions:             Questions générées par le LLM.
-        source_chunk:          Texte source ayant servi de contexte.
-        embedding_model:       Modèle sentence-transformers (None = fallback heuristique).
-        quality_threshold:     Seuil de score composite minimal.
+        questions:               Questions générées par le LLM.
+        source_chunk:            Texte source (chunk principal).
+        embedding_model:         Modèle sentence-transformers (None = fallback heuristique).
+        quality_threshold:       Seuil de score composite minimal.
         answerability_threshold: Seuil d'answerability minimal.
+        rag_context:             Chunks RAG additionnels — concaténés au source_chunk
+                                 pour l'answerability check des questions cross-document.
 
     Returns:
         Liste de ScoredQuestion (toutes, acceptées ET rejetées) pour traçabilité.
@@ -272,13 +278,20 @@ def score_questions(
     if not questions:
         return []
 
+    # Construire la source étendue pour l'answerability check
+    # Les questions cross-document peuvent s'appuyer sur les chunks RAG
+    if rag_context:
+        extended_source = source_chunk + " " + " ".join(rag_context)
+    else:
+        extended_source = source_chunk
+
     scored: List[ScoredQuestion] = []
 
     for q in questions:
-        # 1. Answerability
+        # 1. Answerability (sur source étendue si RAG disponible)
         ans_score = _compute_answerability(
             q.correct_answer or "",
-            source_chunk,
+            extended_source,
             embedding_model,
         )
 

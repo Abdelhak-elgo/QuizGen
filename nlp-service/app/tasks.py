@@ -43,6 +43,7 @@ from app.models import Difficulty, GenerateRequest, GeneratedQuestion, QuestionT
 from app.pdf_extractor import extract_sections
 from app.post_processor import process_questions
 from app.quality_scorer import filter_quality_questions, score_questions
+from app.rag_store import index_document, retrieve_context
 from app.semantic_chunker import SemanticChunk, chunk_text_semantically
 
 logger = logging.getLogger(__name__)
@@ -137,7 +138,18 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
         sum(c.word_count for c in substantial_chunks) / max(1, len(substantial_chunks)),
     )
 
-    self.update_progress(20, 100, f"{len(substantial_chunks)} segments analysés, détection du domaine...")
+    self.update_progress(20, 100, f"{len(substantial_chunks)} segments analysés, indexation RAG...")
+
+    # ── Étape 2b : Indexation ChromaDB (RAG) ─────────────────────────────────
+    # Idempotent : si la collection existe déjà avec le même nb de chunks → skip
+    rag_indexed = index_document(
+        document_id=str(request.document_id),
+        chunks=substantial_chunks,
+        embedding_model=embedding_model,
+    )
+    logger.info("RAG indexation : %s (%d chunks)", "OK" if rag_indexed else "skipped/error", len(substantial_chunks))
+
+    self.update_progress(25, 100, f"RAG indexé | détection du domaine...")
 
     # ── Étape 3 : Détection domaine + classification Bloom ───────────────────
     domain = detect_domain(full_text[:5000])  # Les 5000 premiers mots suffisent
@@ -167,6 +179,8 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
         "domain": domain,
         "n_chunks": len(substantial_chunks),
         "n_generation_calls": total_steps,
+        "rag_indexed": rag_indexed,
+        "rag_retrievals": 0,
         "questions_generated_raw": 0,
         "questions_accepted": 0,
         "questions_rejected": 0,
@@ -186,13 +200,24 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
         # Combiner les keywords du chunk avec l'analyse NLP globale
         keywords = chunk.topic_keywords
 
+        # ── RAG : récupérer les chunks connexes cross-document ────────────────
+        rag_chunks = retrieve_context(
+            document_id=str(request.document_id),
+            query_text=chunk.text,
+            top_k=3,
+            exclude_text=chunk.text,
+            embedding_model=embedding_model,
+        )
+        if rag_chunks:
+            pipeline_stats["rag_retrievals"] += 1
+
         logger.info(
-            "Chunk %d/%d [%s, bloom=%s, diff=%s, domain=%s] — génération %d question(s)",
+            "Chunk %d/%d [%s, bloom=%s, diff=%s, domain=%s, rag=%d] — génération %d question(s)",
             step_idx + 1, total_steps,
-            q_type.value, bloom.level.name, diff.value, domain, nb,
+            q_type.value, bloom.level.name, diff.value, domain, len(rag_chunks), nb,
         )
 
-        # Génération avec prompt CoT adapté
+        # Génération avec prompt CoT adapté + contexte RAG cross-document
         generated = generate_questions(
             context=chunk.text,
             keywords=keywords,
@@ -203,6 +228,7 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
             bloom_directive=bloom.prompt_directive,
             domain=domain,
             domain_suffix=domain_suffix,
+            rag_context=rag_chunks if rag_chunks else None,
         )
 
         pipeline_stats["questions_generated_raw"] += len(generated)
@@ -211,11 +237,12 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
             logger.warning("Chunk %d : aucune question générée — chunk ignoré.", chunk_idx)
             continue
 
-        # Quality scoring (answerability + linguistique + distinctiveness)
+        # Quality scoring (answerability sur source étendue si RAG disponible)
         scored = score_questions(
             questions=generated,
             source_chunk=chunk.text,
             embedding_model=embedding_model,
+            rag_context=rag_chunks if rag_chunks else None,
         )
 
         accepted = filter_quality_questions(scored)
@@ -258,6 +285,8 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
         "nb_generated": len(final_questions),
         "nb_requested": request.nb_questions,
         "domain": domain,
+        "rag_context_used": rag_indexed,
+        "rag_chunks_retrieved": pipeline_stats["rag_retrievals"],
         "pipeline_stats": pipeline_stats,
     }
 
