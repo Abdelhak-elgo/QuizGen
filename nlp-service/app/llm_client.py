@@ -19,6 +19,8 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from typing import Any, Dict, List, Optional
+
 from app.chain_of_thought import SYSTEM_PROMPT_COT, build_cot_prompt
 from app.config import get_settings
 from app.models import Difficulty, GeneratedQuestion, QuestionType
@@ -146,6 +148,7 @@ def generate_questions(
     bloom_directive: str = "Demander d'expliquer le concept dans ses propres mots.",
     domain: str = "general",
     domain_suffix: str = "",
+    rag_context: Optional[List[str]] = None,
     max_retries: int | None = None,
 ) -> List[GeneratedQuestion]:
     """
@@ -168,7 +171,7 @@ def generate_questions(
     """
     max_retries = max_retries or settings.llm_max_retries
 
-    # Construire le prompt CoT structuré
+    # Construire le prompt CoT structuré (avec contexte RAG si disponible)
     prompt = build_cot_prompt(
         question_type=question_type,
         context=context,
@@ -179,6 +182,7 @@ def generate_questions(
         bloom_directive=bloom_directive,
         domain=domain,
         domain_suffix=domain_suffix,
+        rag_context=rag_context,
     )
 
     payload: Dict[str, Any] = {
@@ -197,9 +201,10 @@ def generate_questions(
     for attempt in range(1, max_retries + 1):
         try:
             logger.info(
-                "Ollama CoT — tentative %d/%d (type=%s, bloom=%s, nb=%d, domain=%s)",
+                "Ollama CoT — tentative %d/%d (type=%s, bloom=%s, nb=%d, domain=%s, rag=%d chunks)",
                 attempt, max_retries,
                 question_type.value, bloom_level, nb, domain,
+                len(rag_context) if rag_context else 0,
             )
             with httpx.Client(timeout=settings.ollama_timeout) as client:
                 resp = client.post(

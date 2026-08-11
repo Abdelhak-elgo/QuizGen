@@ -32,7 +32,7 @@ Structure du prompt CoT pour QuizGen :
 Le JSON de sortie inclut le raisonnement intermédiaire (champ "reasoning")
 qui est loggué pour traçabilité mais pas exposé à l'utilisateur final.
 """
-from typing import List
+from typing import List, Optional
 
 from app.models import Difficulty, QuestionType
 
@@ -55,8 +55,8 @@ _COT_QCM_TEMPLATE = """Tu dois générer {nb} question(s) QCM de niveau Bloom "{
 
 DOMAINE : {domain}
 {domain_suffix}
-
-TEXTE SOURCE :
+{rag_section}
+TEXTE SOURCE (passage principal à évaluer) :
 \"\"\"
 {context}
 \"\"\"
@@ -92,8 +92,8 @@ _COT_OUVERTE_TEMPLATE = """Tu dois générer {nb} question(s) ouverte(s) de nive
 
 DOMAINE : {domain}
 {domain_suffix}
-
-TEXTE SOURCE :
+{rag_section}
+TEXTE SOURCE (passage principal à évaluer) :
 \"\"\"
 {context}
 \"\"\"
@@ -124,8 +124,8 @@ _COT_EXERCICE_TEMPLATE = """Tu dois générer {nb} exercice(s) pratique(s) de ni
 
 DOMAINE : {domain}
 {domain_suffix}
-
-TEXTE SOURCE :
+{rag_section}
+TEXTE SOURCE (passage principal à évaluer) :
 \"\"\"
 {context}
 \"\"\"
@@ -179,6 +179,7 @@ def build_cot_prompt(
     bloom_directive: str = "Demander d'expliquer le concept dans ses propres mots.",
     domain: str = "general",
     domain_suffix: str = "",
+    rag_context: Optional[List[str]] = None,
 ) -> str:
     """
     Construit un prompt Chain-of-Thought structuré pour Mistral.
@@ -193,6 +194,9 @@ def build_cot_prompt(
         bloom_directive: Instruction pédagogique spécifique au niveau Bloom.
         domain:          Domaine détecté du document.
         domain_suffix:   Instructions supplémentaires spécifiques au domaine.
+        rag_context:     Chunks connexes récupérés par ChromaDB RAG (optionnel).
+                         Ces passages proviennent d'autres parties du document et
+                         enrichissent le contexte pour des questions cross-chapitres.
 
     Returns:
         Prompt formaté prêt à envoyer à Ollama.
@@ -200,8 +204,8 @@ def build_cot_prompt(
     template = _COT_TEMPLATES.get(question_type, _COT_OUVERTE_TEMPLATE)
     bloom_label = _BLOOM_LABELS.get(bloom_level, bloom_level)
 
-    # Limiter le contexte : ~2500 tokens pour laisser de la place au raisonnement CoT
-    context_truncated = _smart_truncate(context, max_words=350)
+    # Limiter le contexte principal : ~300 mots pour laisser de la place au CoT + RAG
+    context_truncated = _smart_truncate(context, max_words=300)
 
     keywords_str = (
         ", ".join(f'"{k}"' for k in keywords[:8])
@@ -209,12 +213,29 @@ def build_cot_prompt(
         else '"les concepts principaux du texte"'
     )
 
+    # ── Section RAG : contexte complémentaire cross-document ─────────────────
+    # Injectée AVANT le texte source principal pour que Mistral l'utilise
+    # comme "mémoire contextuelle" du reste du document.
+    rag_section = ""
+    if rag_context:
+        rag_parts = []
+        for i, chunk_text in enumerate(rag_context[:3], start=1):
+            truncated_rag = _smart_truncate(chunk_text, max_words=80)
+            rag_parts.append(f"  [{i}] {truncated_rag}")
+        rag_block = "\n".join(rag_parts)
+        rag_section = (
+            f"CONTEXTE COMPLÉMENTAIRE DU DOCUMENT (autres passages liés — "
+            f"tu peux t'en inspirer pour des questions cross-chapitres) :\n"
+            f"{rag_block}\n"
+        )
+
     return template.format(
         nb=nb,
         bloom_level=bloom_label,
         bloom_directive=bloom_directive,
         domain=domain.upper() if domain != "general" else "GÉNÉRAL",
         domain_suffix=domain_suffix,
+        rag_section=rag_section,
         context=context_truncated,
         keywords=keywords_str,
         difficulty=difficulty.value,
