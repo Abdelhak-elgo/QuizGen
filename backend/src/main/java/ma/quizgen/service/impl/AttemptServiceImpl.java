@@ -85,11 +85,20 @@ public class AttemptServiceImpl implements AttemptService {
         }
 
         // ── 2. Score BERTScore pour les questions ouvertes ────────────────────
+        // Le documentId est passé pour récupérer l'evidence RAG (passage source ChromaDB)
+        // qui enrichit chaque résultat BERTScore avec un passage explicatif
+        String documentId = null;
+        try {
+            documentId = attempt.getSession().getQuiz().getDocument().getId().toString();
+        } catch (Exception e) {
+            log.debug("Impossible de récupérer le documentId pour l'evidence RAG : {}", e.getMessage());
+        }
+
         List<BertScoreDetailDto> bertDetails = List.of();
         double openScore = 0.0;
 
         if (!openQuestions.isEmpty()) {
-            bertDetails = bertScoreClient.scoreOpenAnswers(openQuestions, answers);
+            bertDetails = bertScoreClient.scoreOpenAnswers(openQuestions, answers, documentId);
 
             // Score partiel BERTScore : somme des partial_score pour chaque question ouverte
             openScore = bertDetails.stream()
@@ -108,17 +117,19 @@ public class AttemptServiceImpl implements AttemptService {
         if (!bertDetails.isEmpty()) {
             bertDetailsJson = new LinkedHashMap<>();
             for (BertScoreDetailDto d : bertDetails) {
-                bertDetailsJson.put(d.questionId(), Map.of(
-                    "questionContent", d.questionContent(),
-                    "studentAnswer",   d.studentAnswer(),
-                    "referenceAnswer", d.referenceAnswer(),
-                    "f1",              d.f1(),
-                    "precision",       d.precision(),
-                    "recall",          d.recall(),
-                    "partialScore",    d.partialScore(),
-                    "label",           d.label(),
-                    "model",           d.model()
-                ));
+                // Utiliser LinkedHashMap pour tolérer les valeurs null (Map.of() les interdit)
+                Map<String, Object> entry = new LinkedHashMap<>();
+                entry.put("questionContent", d.questionContent());
+                entry.put("studentAnswer",   d.studentAnswer());
+                entry.put("referenceAnswer", d.referenceAnswer());
+                entry.put("f1",              d.f1());
+                entry.put("precision",       d.precision());
+                entry.put("recall",          d.recall());
+                entry.put("partialScore",    d.partialScore());
+                entry.put("label",           d.label());
+                entry.put("model",           d.model());
+                entry.put("evidenceChunk",   d.evidenceChunk());  // peut être null
+                bertDetailsJson.put(d.questionId(), entry);
             }
         }
 
@@ -172,6 +183,10 @@ public class AttemptServiceImpl implements AttemptService {
         for (Map.Entry<String, Object> entry : raw.entrySet()) {
             if (!(entry.getValue() instanceof Map<?, ?> m)) continue;
             Map<String, Object> d = (Map<String, Object>) m;
+            // Reconstruire evidenceChunk depuis le JSONB (peut être null si ChromaDB était indisponible)
+            @SuppressWarnings("unchecked")
+            Map<String, Object> evidenceChunk = (Map<String, Object>) d.get("evidenceChunk");
+
             result.add(new BertScoreDetailDto(
                 entry.getKey(),
                 str(d, "questionContent"),
@@ -182,7 +197,8 @@ public class AttemptServiceImpl implements AttemptService {
                 dbl(d, "recall"),
                 dbl(d, "partialScore"),
                 str(d, "label"),
-                str(d, "model")
+                str(d, "model"),
+                evidenceChunk
             ));
         }
         return result;
