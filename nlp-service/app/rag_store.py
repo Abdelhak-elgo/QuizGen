@@ -105,31 +105,44 @@ def index_document(
 
     collection_name = _collection_name(document_id)
 
+    # ── Hash de contenu stable pour l'idempotence ────────────────────────────
+    # On hash la concaténation ordonnée des textes de chunk.
+    # Invariant : même document → même hash ; document modifié → hash différent.
+    # MD5 est suffisant ici (pas de contexte de sécurité, juste comparaison rapide).
+    content_hash = hashlib.md5(
+        "".join(c.text for c in chunks).encode("utf-8", errors="replace")
+    ).hexdigest()
+
     try:
         # Vérifier si la collection existe déjà avec le même contenu
         try:
             existing = client.get_collection(collection_name)
-            existing_count = existing.count()
-            if existing_count == len(chunks):
+            # Le hash est stocké dans les métadonnées de la collection
+            stored_hash = (existing.metadata or {}).get("content_hash", "")
+            if stored_hash == content_hash:
                 logger.info(
-                    "RAG : collection %s déjà indexée (%d chunks) — skip",
-                    collection_name, existing_count,
+                    "RAG : collection %s déjà indexée (hash=%s) — skip",
+                    collection_name, content_hash[:8],
                 )
                 return True
             else:
-                # Contenu différent (document ré-uploadé) → supprimer et ré-indexer
+                # Contenu différent (document ré-uploadé ou re-chunké) → ré-indexer
                 logger.info(
-                    "RAG : collection %s existante (%d chunks) ≠ nouveau (%d chunks) — ré-indexation",
-                    collection_name, existing_count, len(chunks),
+                    "RAG : collection %s — hash changé (%s → %s) — ré-indexation",
+                    collection_name,
+                    stored_hash[:8] if stored_hash else "none",
+                    content_hash[:8],
                 )
                 client.delete_collection(collection_name)
         except Exception:
             pass  # Collection n'existe pas encore
 
-        # Créer la collection avec métrique cosinus
+        # Créer la collection avec métrique cosinus + hash de contenu
+        # Le hash est persisté dans les métadonnées de la collection
+        # → détection des changements lors des ré-uploads
         collection = client.create_collection(
             name=collection_name,
-            metadata={"hnsw:space": "cosine"},
+            metadata={"hnsw:space": "cosine", "content_hash": content_hash},
         )
 
         # Préparer les données à indexer
