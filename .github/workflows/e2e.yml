@@ -1,4 +1,4 @@
-name: E2E & Qualité IA — QuizGen
+name: "E2E & Qualite IA - QuizGen"
 
 on:
   push:
@@ -8,21 +8,16 @@ on:
   workflow_dispatch:
     inputs:
       run_ai_quality:
-        description: 'Lancer l'évaluation qualité IA (slow)'
+        description: "Lancer l'evaluation qualite IA (slow - ~30 min)"
         type: boolean
         default: false
-
-env:
-  REGISTRY: ghcr.io
-  IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/quizgen-backend
-  IMAGE_NLP:     ghcr.io/${{ github.repository_owner }}/quizgen-nlp
 
 jobs:
   # ── Job 1 : Tests E2E Playwright ───────────────────────────────────────────
   e2e:
     name: Tests E2E Playwright
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
 
     services:
       postgres:
@@ -53,12 +48,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      # ── Node + Playwright ─────────────────────────────────────────────────
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: "20"
-          cache: "npm"
-          cache-dependency-path: e2e/package.json
 
       - name: Install Playwright & dependencies
         working-directory: e2e
@@ -66,8 +60,8 @@ jobs:
           npm ci
           npx playwright install chromium --with-deps
 
-      # ── Démarrer Keycloak ─────────────────────────────────────────────────
-      - name: Start Keycloak (test realm)
+      # ── Keycloak (port 8180) ──────────────────────────────────────────────
+      - name: Start Keycloak
         run: |
           docker run -d \
             --name keycloak-e2e \
@@ -76,17 +70,25 @@ jobs:
             -e KEYCLOAK_ADMIN_PASSWORD=admin \
             -e KC_DB=dev-mem \
             -e KC_HTTP_ENABLED=true \
+            -e KC_HTTP_PORT=8180 \
             -e KC_HOSTNAME_STRICT=false \
-            -v ${{ github.workspace }}/keycloak:/opt/keycloak/data/import:ro \
+            -v "${{ github.workspace }}/keycloak:/opt/keycloak/data/import:ro" \
             quay.io/keycloak/keycloak:25.0 \
             start-dev --import-realm
-          echo "Attente démarrage Keycloak..."
+          echo "Attente demarrage Keycloak (max 150s)..."
           for i in $(seq 1 30); do
-            curl -sf http://localhost:8180/health/ready && echo "Keycloak prêt" && break
+            if curl -sf http://localhost:8180/health/ready; then
+              echo "Keycloak pret."
+              exit 0
+            fi
+            echo "  tentative $i/30..."
             sleep 5
           done
+          echo "ERREUR: Keycloak n'a pas demarre a temps"
+          docker logs keycloak-e2e
+          exit 1
 
-      # ── Démarrer MinIO ────────────────────────────────────────────────────
+      # ── MinIO ─────────────────────────────────────────────────────────────
       - name: Start MinIO
         run: |
           docker run -d \
@@ -95,12 +97,21 @@ jobs:
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
             minio/minio:latest server /data
-          sleep 5
+          echo "Attente MinIO (max 30s)..."
+          for i in $(seq 1 6); do
+            if curl -sf http://localhost:9000/minio/health/live; then
+              echo "MinIO pret."
+              break
+            fi
+            sleep 5
+          done
           docker run --rm --network host \
             minio/mc:latest \
-            sh -c "mc alias set local http://localhost:9000 minioadmin minioadmin && mc mb --ignore-existing local/documents && mc mb --ignore-existing local/exports"
+            sh -c "mc alias set local http://localhost:9000 minioadmin minioadmin \
+              && mc mb --ignore-existing local/documents \
+              && mc mb --ignore-existing local/exports"
 
-      # ── Construire et démarrer le backend Spring Boot ─────────────────────
+      # ── Spring Boot ───────────────────────────────────────────────────────
       - name: Set up JDK 21
         uses: actions/setup-java@v4
         with:
@@ -108,82 +119,104 @@ jobs:
           distribution: temurin
           cache: maven
 
-      - name: Build Spring Boot (skip tests pour E2E)
+      - name: Build Spring Boot (skip tests)
         working-directory: backend
         run: mvn -B package -DskipTests --no-transfer-progress
 
       - name: Start Spring Boot backend
         run: |
           java \
-            -DSPRING_DATASOURCE_URL="jdbc:postgresql://localhost:5432/quizgen_e2e" \
-            -DSPRING_DATASOURCE_USERNAME=quizgen \
-            -DSPRING_DATASOURCE_PASSWORD=e2e_secret \
-            -DSPRING_JPA_HIBERNATE_DDL_AUTO=create-drop \
-            -DKEYCLOAK_URL=http://localhost:8180 \
-            -DKEYCLOAK_REALM=quizgen \
-            -DMINIO_URL=http://localhost:9000 \
-            -DMINIO_ACCESS_KEY=minioadmin \
-            -DMINIO_SECRET_KEY=minioadmin \
-            -DSPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI=http://localhost:8180/realms/quizgen \
-            -DSPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_JWK_SET_URI=http://localhost:8180/realms/quizgen/protocol/openid-connect/certs \
-            -jar backend/target/quizgen-backend-*.jar &
-          echo "Attente démarrage Spring Boot..."
-          for i in $(seq 1 30); do
-            curl -sf http://localhost:8080/api/v1/actuator/health && echo "Backend prêt" && break
+            -Dspring.datasource.url="jdbc:postgresql://localhost:5432/quizgen_e2e" \
+            -Dspring.datasource.username=quizgen \
+            -Dspring.datasource.password=e2e_secret \
+            -Dspring.jpa.hibernate.ddl-auto=create-drop \
+            -Dspring.security.oauth2.resourceserver.jwt.issuer-uri="http://localhost:8180/realms/quizgen" \
+            -Dspring.security.oauth2.resourceserver.jwt.jwk-set-uri="http://localhost:8180/realms/quizgen/protocol/openid-connect/certs" \
+            -Dkeycloak.url="http://localhost:8180" \
+            -Dkeycloak.realm=quizgen \
+            -Dminio.url="http://localhost:9000" \
+            -Dminio.access-key=minioadmin \
+            -Dminio.secret-key=minioadmin \
+            -Dnlp.service.url="http://localhost:8000" \
+            -jar backend/target/quizgen-backend-*.jar \
+            > /tmp/backend.log 2>&1 &
+          echo "Attente demarrage Spring Boot (max 120s)..."
+          for i in $(seq 1 24); do
+            if curl -sf http://localhost:8080/api/v1/actuator/health; then
+              echo "Backend pret."
+              exit 0
+            fi
+            echo "  tentative $i/24..."
             sleep 5
           done
+          echo "ERREUR: Spring Boot n'a pas demarre a temps"
+          tail -50 /tmp/backend.log
+          exit 1
 
-      # ── Démarrer le frontend Vite ────────────────────────────────────────
+      # ── Frontend Vite ─────────────────────────────────────────────────────
       - name: Setup pnpm
         uses: pnpm/action-setup@v4
         with:
           version: 9
 
-      - name: Install frontend dependencies
+      - name: Install workspace dependencies
         run: pnpm install --frozen-lockfile
 
       - name: Start frontend dev server
-        run: pnpm --filter @workspace/frontend run dev &
-        env:
-          PORT: "4321"
+        run: |
+          PORT=4321 pnpm --filter @workspace/frontend run dev > /tmp/frontend.log 2>&1 &
+          echo "Attente demarrage Vite (max 60s)..."
+          for i in $(seq 1 12); do
+            if curl -sf http://localhost:4321/frontend/ > /dev/null 2>&1; then
+              echo "Frontend pret."
+              exit 0
+            fi
+            echo "  tentative $i/12..."
+            sleep 5
+          done
+          echo "AVERTISSEMENT: Frontend pas encore pret - les tests peuvent echouer"
+          tail -20 /tmp/frontend.log || true
 
-      # ── Créer les utilisateurs de test ───────────────────────────────────
+      # ── Utilisateurs de test Keycloak ─────────────────────────────────────
       - name: Create E2E test users in Keycloak
         run: |
-          # Attendre que Keycloak soit prêt
-          sleep 10
           # Obtenir un token admin
-          TOKEN=$(curl -sf \
-            http://localhost:8180/realms/master/protocol/openid-connect/token \
+          ADMIN_TOKEN=$(curl -sf \
+            -X POST "http://localhost:8180/realms/master/protocol/openid-connect/token" \
             -d "grant_type=password&client_id=admin-cli&username=admin&password=admin" \
             | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
-          
-          # Créer l'enseignant de test
-          curl -sf -X POST http://localhost:8180/admin/realms/quizgen/users \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"prof.test@quizgen.ma","email":"prof.test@quizgen.ma","enabled":true,"credentials":[{"type":"password","value":"Test1234!","temporary":false}]}'
-          
-          # Créer l'étudiant de test
-          curl -sf -X POST http://localhost:8180/admin/realms/quizgen/users \
-            -H "Authorization: Bearer $TOKEN" \
-            -H "Content-Type: application/json" \
-            -d '{"username":"etudiant.test@quizgen.ma","email":"etudiant.test@quizgen.ma","enabled":true,"credentials":[{"type":"password","value":"Test1234!","temporary":false}]}'
-          echo "Utilisateurs de test créés"
+          if [ -z "$ADMIN_TOKEN" ]; then
+            echo "ERREUR: Impossible d'obtenir le token admin Keycloak"
+            exit 1
+          fi
 
-      # ── Lancer les tests E2E ──────────────────────────────────────────────
+          # Enseignant de test
+          curl -sf -X POST "http://localhost:8180/admin/realms/quizgen/users" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"username":"prof.test@quizgen.ma","email":"prof.test@quizgen.ma","enabled":true,"credentials":[{"type":"password","value":"Test1234!","temporary":false}]}' || true
+
+          # Etudiant de test
+          curl -sf -X POST "http://localhost:8180/admin/realms/quizgen/users" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" \
+            -H "Content-Type: application/json" \
+            -d '{"username":"etudiant.test@quizgen.ma","email":"etudiant.test@quizgen.ma","enabled":true,"credentials":[{"type":"password","value":"Test1234!","temporary":false}]}' || true
+
+          echo "Utilisateurs de test crees."
+
+      # ── Tests E2E ─────────────────────────────────────────────────────────
       - name: Run Playwright E2E tests
         working-directory: e2e
         run: npx playwright test --reporter=github,html
         env:
-          BASE_URL:           "http://localhost:4321/frontend"
-          KC_URL:             "http://localhost:8180"
-          KC_REALM:           "quizgen"
-          TEST_TEACHER_USER:  "prof.test@quizgen.ma"
-          TEST_TEACHER_PASS:  "Test1234!"
-          TEST_STUDENT_USER:  "etudiant.test@quizgen.ma"
-          TEST_STUDENT_PASS:  "Test1234!"
-          TEST_SESSION_CODE:  "TEST01"
+          BASE_URL:          "http://localhost:4321/frontend"
+          KC_URL:            "http://localhost:8180"
+          KC_REALM:          "quizgen"
+          TEST_TEACHER_USER: "prof.test@quizgen.ma"
+          TEST_TEACHER_PASS: "Test1234!"
+          TEST_STUDENT_USER: "etudiant.test@quizgen.ma"
+          TEST_STUDENT_PASS: "Test1234!"
+          TEST_SESSION_CODE: "TEST01"
 
       - name: Upload Playwright report
         uses: actions/upload-artifact@v4
@@ -193,7 +226,7 @@ jobs:
           path: e2e/playwright-report/
           retention-days: 14
 
-      - name: Upload test results (JUnit)
+      - name: Upload JUnit results
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -201,14 +234,17 @@ jobs:
           path: e2e/results/junit.xml
           retention-days: 14
 
-  # ── Job 2 : Évaluation qualité IA ─────────────────────────────────────────
+      - name: Print backend logs on failure
+        if: failure()
+        run: tail -100 /tmp/backend.log || true
+
+  # ── Job 2 : Evaluation qualite IA ─────────────────────────────────────────
   ai-quality:
-    name: Évaluation qualité IA (BLEU/ROUGE/BERTScore)
+    name: "Evaluation qualite IA (BLEU/ROUGE/BERTScore)"
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    # Déclenché manuellement ou sur main uniquement
-    if: >
-      github.event_name == 'workflow_dispatch' && inputs.run_ai_quality ||
+    if: |
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.run_ai_quality == 'true') ||
       (github.event_name == 'push' && github.ref == 'refs/heads/main')
 
     steps:
@@ -222,17 +258,14 @@ jobs:
           cache: "pip"
 
       - name: Install evaluation dependencies
-        run: |
-          pip install --no-cache-dir sacrebleu rouge-score requests
-          # bert-score non installé en CI (modèle ~1.4 Go) — mode dry-run
+        run: pip install --no-cache-dir sacrebleu rouge-score requests
+        # bert-score non installe en CI (modele ~1.4 Go) -- mode dry-run
 
       - name: Run AI quality evaluation (dry-run)
         run: |
           python evaluation/evaluate.py \
             --dry-run \
             --output evaluation/rapport_qualite_ia.md
-        env:
-          QUIZGEN_API_TOKEN: ""
 
       - name: Upload quality report
         uses: actions/upload-artifact@v4
@@ -242,13 +275,11 @@ jobs:
           retention-days: 30
 
       - name: Display report summary
-        run: |
-          echo "=== Résumé Rapport Qualité IA ==="
-          head -30 evaluation/rapport_qualite_ia.md || true
+        run: head -30 evaluation/rapport_qualite_ia.md || true
 
-  # ── Job 3 : Test de performance (charge) ─────────────────────────────────
+  # ── Job 3 : Test de performance ────────────────────────────────────────────
   performance:
-    name: Test de performance génération quiz
+    name: Test de performance generation quiz
     runs-on: ubuntu-latest
     timeout-minutes: 15
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -257,18 +288,16 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Install wrk / hey
-        run: |
-          sudo apt-get install -y wrk 2>/dev/null || \
-          go install github.com/rakyll/hey@latest 2>/dev/null || \
-          echo "Tools disponibles: curl avec parallélisme"
+      - name: Install wrk
+        run: sudo apt-get install -y wrk 2>/dev/null || true
 
       - name: Run performance script
         run: |
           chmod +x scripts/performance-test.sh
           bash scripts/performance-test.sh || echo "Performance test skipped (service non disponible)"
         env:
-          API_BASE_URL: ${{ secrets.STAGING_API_URL || 'http://localhost:8080/api/v1' }}
+          # Utilise le secret si defini, sinon localhost (pas de service en CI)
+          API_BASE_URL: ${{ secrets.STAGING_API_URL != '' && secrets.STAGING_API_URL || 'http://localhost:8080/api/v1' }}
 
       - name: Upload performance report
         uses: actions/upload-artifact@v4

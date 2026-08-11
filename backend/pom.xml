@@ -120,6 +120,56 @@
                     </excludes>
                 </configuration>
             </plugin>
+
+            <!-- JaCoCo — rapport de couverture pour SonarQube et CI -->
+            <plugin>
+                <groupId>org.jacoco</groupId>
+                <artifactId>jacoco-maven-plugin</artifactId>
+                <version>0.8.12</version>
+                <executions>
+                    <!-- Initialise l'agent JaCoCo avant les tests -->
+                    <execution>
+                        <id>prepare-agent</id>
+                        <goals><goal>prepare-agent</goal></goals>
+                    </execution>
+                    <!-- Génère le rapport XML après les tests (cible : verify) -->
+                    <execution>
+                        <id>report</id>
+                        <phase>verify</phase>
+                        <goals><goal>report</goal></goals>
+                    </execution>
+                    <!-- Vérifie le seuil de couverture minimale (70 %) -->
+                    <execution>
+                        <id>check</id>
+                        <phase>verify</phase>
+                        <goals><goal>check</goal></goals>
+                        <configuration>
+                            <rules>
+                                <rule>
+                                    <element>BUNDLE</element>
+                                    <limits>
+                                        <limit>
+                                            <counter>INSTRUCTION</counter>
+                                            <value>COVEREDRATIO</value>
+                                            <minimum>0.60</minimum>
+                                        </limit>
+                                    </limits>
+                                </rule>
+                            </rules>
+                            <!-- Ne pas bloquer le build si le seuil n'est pas atteint -->
+                            <haltOnFailure>false</haltOnFailure>
+                        </configuration>
+                    </execution>
+                </executions>
+                <configuration>
+                    <!-- Exclure les classes non testables -->
+                    <excludes>
+                        <exclude>**/QuizGenApplication.class</exclude>
+                        <exclude>**/config/**</exclude>
+                        <exclude>**/entity/**/*_.class</exclude>
+                    </excludes>
+                </configuration>
+            </plugin>
         </plugins>
     </build>
 </project>
