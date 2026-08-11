@@ -39,20 +39,29 @@ public class Attempt {
     private User student;
 
     /**
-     * Réponses de l'étudiant : Map<question_id (String), réponse (String)>.
+     * Réponses de l'étudiant : Map&lt;question_id (String), réponse (String)&gt;.
      * Stocké en JSONB en base.
      */
     @JdbcTypeCode(SqlTypes.JSON)
     @Column(columnDefinition = "jsonb")
     private Map<String, String> answers;
 
-    /** Score obtenu (nombre de bonnes réponses pour les QCM). */
+    /** Score obtenu (QCM + contribution partielle des réponses ouvertes via BERTScore). */
     @Builder.Default
     private Integer score = 0;
 
     /** Score maximum possible (nombre de questions). */
     @Column(name = "max_score")
     private Integer maxScore;
+
+    /**
+     * Détail des scores BERTScore par question ouverte/exercice.
+     * Map&lt;question_id (String), BertScoreDetail (JSON)&gt;.
+     * Null si aucune question ouverte.
+     */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "bert_score_details", columnDefinition = "jsonb")
+    private Map<String, Object> bertScoreDetails;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "attempt_status", nullable = false, length = 20)
