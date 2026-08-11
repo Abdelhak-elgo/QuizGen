@@ -1,5 +1,6 @@
 package ma.quizgen.service;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import ma.quizgen.dto.BertScoreDetailDto;
 import ma.quizgen.entity.Question;
 import ma.quizgen.entity.enums.Difficulty;
@@ -29,13 +30,23 @@ class BertScoreClientTest {
     @Mock
     private RestTemplate restTemplate;
 
+    /** ObjectMapper réel — suffisant pour sérialiser les maps de test. */
+    private final ObjectMapper objectMapper = new ObjectMapper();
+
     private BertScoreClientImpl client;
 
     private static final String NLP_URL = "http://nlp-service:8000";
 
+    /**
+     * documentId null dans les tests de scoring de base : l'evidence RAG
+     * n'est pas l'objet de ces tests et doit se dégrader silencieusement.
+     */
+    private static final String NULL_DOC_ID = null;
+
     @BeforeEach
     void setUp() {
-        client = new BertScoreClientImpl(restTemplate, NLP_URL);
+        // Constructeur à 3 arguments : RestTemplate + ObjectMapper + URL
+        client = new BertScoreClientImpl(restTemplate, objectMapper, NLP_URL);
     }
 
     // ── Helpers ───────────────────────────────────────────────────────────────
@@ -71,12 +82,12 @@ class BertScoreClientTest {
         return r;
     }
 
-    // ── Tests ─────────────────────────────────────────────────────────────────
+    // ── Tests scoring de base ─────────────────────────────────────────────────
 
     @Test
     @DisplayName("Retourne une liste vide si aucune question ouverte fournie")
     void scoreOpenAnswers_emptyQuestions_returnsEmptyList() {
-        var result = client.scoreOpenAnswers(List.of(), Map.of());
+        var result = client.scoreOpenAnswers(List.of(), Map.of(), NULL_DOC_ID);
         assertThat(result).isEmpty();
         verifyNoInteractions(restTemplate);
     }
@@ -87,7 +98,7 @@ class BertScoreClientTest {
         var q = openQuestion("00000000-0000-0000-0000-000000000001",
                              "Définissez la photosynthèse.",
                              "Synthèse de matière organique par les plantes.");
-        var result = client.scoreOpenAnswers(List.of(q), Map.of());
+        var result = client.scoreOpenAnswers(List.of(q), Map.of(), NULL_DOC_ID);
         assertThat(result).isEmpty();
         verifyNoInteractions(restTemplate);
     }
@@ -109,7 +120,7 @@ class BertScoreClientTest {
             scoreResult(qId, 0.82, 1.0, "CORRECT")
         )));
 
-        var results = client.scoreOpenAnswers(List.of(q), answers);
+        var results = client.scoreOpenAnswers(List.of(q), answers, NULL_DOC_ID);
 
         assertThat(results).hasSize(1);
         BertScoreDetailDto dto = results.get(0);
@@ -120,6 +131,8 @@ class BertScoreClientTest {
         assertThat(dto.model()).isEqualTo("roberta-large");
         assertThat(dto.studentAnswer()).isEqualTo(answers.get(qId));
         assertThat(dto.referenceAnswer()).isEqualTo(q.getCorrectAnswer());
+        // Avec documentId null, evidenceChunk doit être null (pas de tentative d'appel)
+        assertThat(dto.evidenceChunk()).isNull();
     }
 
     @Test
@@ -133,7 +146,7 @@ class BertScoreClientTest {
         when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
             .thenReturn(successResponse(List.of(scoreResult(qId, 0.60, 0.5, "PARTIEL"))));
 
-        var results = client.scoreOpenAnswers(List.of(q), answers);
+        var results = client.scoreOpenAnswers(List.of(q), answers, NULL_DOC_ID);
 
         assertThat(results).hasSize(1);
         assertThat(results.get(0).label()).isEqualTo("PARTIEL");
@@ -150,7 +163,7 @@ class BertScoreClientTest {
         when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
             .thenThrow(new ResourceAccessException("Connection refused"));
 
-        var results = client.scoreOpenAnswers(List.of(q), answers);
+        var results = client.scoreOpenAnswers(List.of(q), answers, NULL_DOC_ID);
 
         assertThat(results).hasSize(1);
         BertScoreDetailDto dto = results.get(0);
@@ -158,9 +171,9 @@ class BertScoreClientTest {
         assertThat(dto.partialScore()).isEqualTo(0.0);
         assertThat(dto.label()).isEqualTo("INCORRECT");
         assertThat(dto.model()).isEqualTo("unavailable");
-        // L'information de la question est quand même incluse
         assertThat(dto.questionId()).isEqualTo(qId);
         assertThat(dto.studentAnswer()).isEqualTo("Adénosine triphosphate.");
+        assertThat(dto.evidenceChunk()).isNull();  // fallback → pas d'evidence
     }
 
     @Test
@@ -174,7 +187,7 @@ class BertScoreClientTest {
         when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
             .thenReturn(successResponse(List.of(scoreResult(qId, 0.72, 1.0, "CORRECT"))));
 
-        client.scoreOpenAnswers(List.of(q), answers);
+        client.scoreOpenAnswers(List.of(q), answers, NULL_DOC_ID);
 
         @SuppressWarnings("unchecked")
         ArgumentCaptor<HttpEntity<Map<String, Object>>> captor =
@@ -196,8 +209,6 @@ class BertScoreClientTest {
         assertThat(items.get(0)).containsEntry("question_id", qId);
         assertThat(items.get(0)).containsEntry("candidate", "Production d'énergie par le glucose.");
         assertThat(items.get(0)).containsEntry("reference", "Dégradation du glucose en ATP.");
-
-        // Vérifier les headers Content-Type
         assertThat(captor.getValue().getHeaders().getContentType())
             .isEqualTo(MediaType.APPLICATION_JSON);
     }
@@ -218,10 +229,50 @@ class BertScoreClientTest {
                 scoreResult(q2Id, 0.40, 0.0, "INCORRECT")
             )));
 
-        var results = client.scoreOpenAnswers(List.of(q1, q2), answers);
+        var results = client.scoreOpenAnswers(List.of(q1, q2), answers, NULL_DOC_ID);
 
         assertThat(results).hasSize(2);
         assertThat(results.stream().map(BertScoreDetailDto::questionId))
             .containsExactlyInAnyOrder(q1Id, q2Id);
+    }
+
+    // ── Tests Evidence RAG ────────────────────────────────────────────────────
+
+    @Test
+    @DisplayName("Evidence non tentée si documentId est null — evidenceChunk null")
+    void scoreOpenAnswers_nullDocumentId_evidenceChunkNull() {
+        String qId = "00000000-0000-0000-0000-000000000007";
+        var q = openQuestion(qId, "Qu'est-ce que le gradient ?",
+                             "Vecteur de dérivées partielles.");
+        Map<String, String> answers = Map.of(qId, "Le gradient indique la direction de montée.");
+
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
+            .thenReturn(successResponse(List.of(scoreResult(qId, 0.75, 1.0, "CORRECT"))));
+
+        // documentId null → fetchEvidence retourne null sans appel HTTP
+        var results = client.scoreOpenAnswers(List.of(q), answers, null);
+
+        assertThat(results).hasSize(1);
+        // evidenceChunk doit être null : aucune tentative d'appel HTTP n'a eu lieu
+        assertThat(results.get(0).evidenceChunk()).isNull();
+    }
+
+    @Test
+    @DisplayName("Fallback gracieux si le service NLP retourne un corps null")
+    void scoreOpenAnswers_nullResponseBody_returnsFallback() {
+        String qId = "00000000-0000-0000-0000-000000000008";
+        var q = openQuestion(qId, "Définissez l'ARN.", "Acide ribonucléique.");
+        Map<String, String> answers = Map.of(qId, "ARN = acide nucléique.");
+
+        // Simuler une réponse 200 avec body null
+        when(restTemplate.exchange(anyString(), any(), any(), eq(Map.class)))
+            .thenReturn(ResponseEntity.ok(null));
+
+        var results = client.scoreOpenAnswers(List.of(q), answers, NULL_DOC_ID);
+
+        assertThat(results).hasSize(1);
+        assertThat(results.get(0).label()).isEqualTo("INCORRECT");
+        assertThat(results.get(0).model()).isEqualTo("unavailable");
+        assertThat(results.get(0).evidenceChunk()).isNull();
     }
 }
