@@ -31,6 +31,11 @@ class Settings(BaseSettings):
     # Post-processing
     rouge_dedup_threshold: float = 0.8
 
+    # RAG — ChromaDB vector store
+    rag_enabled: bool = True
+    rag_top_k: int = 3
+    chromadb_path: str = "/tmp/chroma"
+
     class Config:
         env_file = ".env"
         env_file_encoding = "utf-8"

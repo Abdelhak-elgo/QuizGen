@@ -38,3 +38,6 @@ python-multipart==0.0.9
 
 # Monitoring Prometheus
 prometheus-client==0.21.0
+
+# RAG — Vector store persistant (zéro dépendance GPU)
+chromadb==0.5.3

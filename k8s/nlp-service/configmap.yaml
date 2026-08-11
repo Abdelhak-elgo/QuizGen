@@ -18,3 +18,7 @@ data:
   # Cache Redis pour les extractions PDF (Phase 7)
   PDF_CACHE_TTL_SECONDS: "3600"
   PDF_CACHE_ENABLED: "true"
+  # RAG — ChromaDB vector store (Phase 8)
+  RAG_ENABLED: "true"
+  RAG_TOP_K: "3"
+  CHROMADB_PATH: "/data/chroma"
