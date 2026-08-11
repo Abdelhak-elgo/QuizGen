@@ -1,0 +1,682 @@
+{
+  "info": {
+    "_postman_id": "quizgen-collection-v1",
+    "name": "QuizGen API",
+    "description": "Collection Postman complète pour l'API QuizGen.\n\n## Prérequis\n1. Importer l'environnement `QuizGen Local` (`postman/quizgen.postman_environment.json`)\n2. Lancer les services : `docker-compose up -d`\n3. Exécuter **Auth > Get Token (Enseignant)** pour récupérer le JWT automatiquement\n4. Tester les endpoints dans l'ordre : Auth → Users → Documents",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [],
+  "item": [
+    {
+      "name": "Auth",
+      "description": "Authentification OAuth2 via Keycloak (Resource Owner Password Grant).\nLe token JWT est automatiquement stocké dans la variable `access_token`.",
+      "item": [
+        {
+          "name": "Get Token (Enseignant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('access_token présent', () => {",
+                  "  pm.expect(json.access_token).to.be.a('string').and.not.empty;",
+                  "});",
+                  "",
+                  "pm.test('token_type est Bearer', () => {",
+                  "  pm.expect(json.token_type).to.eql('Bearer');",
+                  "});",
+                  "",
+                  "// Stockage automatique du token",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('access_token', json.access_token);",
+                  "  pm.environment.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ Token JWT stocké dans access_token');",
+                  "}",
+                  "",
+                  "// Décodage du payload pour afficher les rôles",
+                  "const payload = json.access_token.split('.')[1];",
+                  "const decoded = JSON.parse(atob(payload));",
+                  "console.log('Rôles Keycloak:', decoded.realm_access?.roles);",
+                  "console.log('Email:', decoded.email);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "password" },
+                { "key": "client_id",  "value": "{{keycloak_client_id}}" },
+                { "key": "username",   "value": "{{teacher_email}}" },
+                { "key": "password",   "value": "{{teacher_password}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            },
+            "description": "Obtient un token JWT pour l'enseignant de test. Le token est automatiquement stocké dans `access_token`."
+          }
+        },
+        {
+          "name": "Get Token (Étudiant)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "pm.test('access_token présent', () => pm.expect(json.access_token).to.be.a('string'));",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('access_token', json.access_token);",
+                  "  pm.environment.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ Token étudiant stocké');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "password" },
+                { "key": "client_id",  "value": "{{keycloak_client_id}}" },
+                { "key": "username",   "value": "{{student_email}}" },
+                { "key": "password",   "value": "{{student_password}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            },
+            "description": "Obtient un token JWT pour l'étudiant de test."
+          }
+        },
+        {
+          "name": "Get Token (Admin)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('access_token', json.access_token);",
+                  "  console.log('✅ Token admin stocké');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type", "value": "password" },
+                { "key": "client_id",  "value": "{{keycloak_client_id}}" },
+                { "key": "username",   "value": "{{admin_email}}" },
+                { "key": "password",   "value": "{{admin_password}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            }
+          }
+        },
+        {
+          "name": "Refresh Token",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "const json = pm.response.json();",
+                  "if (json.access_token) {",
+                  "  pm.environment.set('access_token', json.access_token);",
+                  "  pm.environment.set('refresh_token', json.refresh_token);",
+                  "  console.log('✅ Token rafraîchi');",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/x-www-form-urlencoded" }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                { "key": "grant_type",    "value": "refresh_token" },
+                { "key": "client_id",     "value": "{{keycloak_client_id}}" },
+                { "key": "refresh_token", "value": "{{refresh_token}}" }
+              ]
+            },
+            "url": {
+              "raw": "{{keycloak_url}}/realms/{{keycloak_realm}}/protocol/openid-connect/token",
+              "host": ["{{keycloak_url}}"],
+              "path": ["realms", "{{keycloak_realm}}", "protocol", "openid-connect", "token"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "description": "Gestion des profils utilisateurs. Le header `Authorization: Bearer {{access_token}}` est injecté automatiquement via l'Auth pré-configurée au niveau du dossier.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "POST /users/sync — Synchroniser utilisateur",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('id présent (UUID)', () => {",
+                  "  pm.expect(json.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "});",
+                  "",
+                  "pm.test('email correct', () => {",
+                  "  pm.expect(json.email).to.be.a('string').and.include('@');",
+                  "});",
+                  "",
+                  "pm.test('role défini', () => {",
+                  "  pm.expect(['ENSEIGNANT','ETUDIANT','ADMIN']).to.include(json.role);",
+                  "});",
+                  "",
+                  "// Stocker l'ID pour les requêtes suivantes",
+                  "if (json.id) pm.environment.set('current_user_id', json.id);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/sync",
+              "host": ["{{base_url}}"],
+              "path": ["users", "sync"]
+            },
+            "description": "Synchronise l'utilisateur Keycloak dans la BDD. À appeler une fois après le premier login."
+          }
+        },
+        {
+          "name": "GET /users/me — Mon profil",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('id présent', () => pm.expect(json.id).to.be.a('string'));",
+                  "pm.test('email présent', () => pm.expect(json.email).to.be.a('string'));",
+                  "pm.test('role présent', () => pm.expect(json.role).to.be.a('string'));",
+                  "pm.test('isActive = true', () => pm.expect(json.isActive).to.be.true);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Retourne le profil de l'utilisateur authentifié."
+          }
+        },
+        {
+          "name": "GET /users — Liste (ADMIN)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Ce endpoint nécessite le token admin",
+                  "// Exécutez d'abord 'Auth > Get Token (Admin)'"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('content est un tableau', () => {",
+                  "  pm.expect(json.content).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('pagination présente', () => {",
+                  "  pm.expect(json.totalElements).to.be.a('number');",
+                  "  pm.expect(json.totalPages).to.be.a('number');",
+                  "  pm.expect(json.page).to.be.a('number');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users?page=0&size=20&sortBy=createdAt&direction=desc",
+              "host": ["{{base_url}}"],
+              "path": ["users"],
+              "query": [
+                { "key": "page",      "value": "0" },
+                { "key": "size",      "value": "20" },
+                { "key": "sortBy",    "value": "createdAt" },
+                { "key": "direction", "value": "desc" }
+              ]
+            },
+            "description": "Liste tous les utilisateurs (rôle ADMIN requis)."
+          }
+        },
+        {
+          "name": "GET /users/{id} — Détail (ADMIN)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 ou 404', () => {",
+                  "  pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "  const json = pm.response.json();",
+                  "  pm.test('id présent', () => pm.expect(json.id).to.be.a('string'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/{{current_user_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["users", "{{current_user_id}}"]
+            },
+            "description": "Détail d'un utilisateur par ID (rôle ADMIN requis). Utilisez `current_user_id` stocké par `/users/sync`."
+          }
+        },
+        {
+          "name": "GET /users/me — Sans token (401 attendu)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 401 Unauthorized', () => pm.response.to.have.status(401));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/users/me",
+              "host": ["{{base_url}}"],
+              "path": ["users", "me"]
+            },
+            "description": "Vérifie que l'endpoint retourne 401 sans token."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Documents",
+      "description": "Upload et gestion des documents PDF. Le header Authorization est injecté via l'auth du dossier.",
+      "auth": {
+        "type": "bearer",
+        "bearer": [{ "key": "token", "value": "{{access_token}}", "type": "string" }]
+      },
+      "item": [
+        {
+          "name": "POST /documents/upload — Upload PDF",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// Le fichier PDF doit être sélectionné manuellement dans Postman :",
+                  "// Body > form-data > file (type File) → sélectionner un PDF local"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('id du document présent (UUID)', () => {",
+                  "  pm.expect(json.id).to.match(/^[0-9a-f-]{36}$/i);",
+                  "});",
+                  "",
+                  "pm.test('originalFilename présent', () => {",
+                  "  pm.expect(json.originalFilename).to.be.a('string').and.include('.pdf');",
+                  "});",
+                  "",
+                  "pm.test('objectKey présent', () => {",
+                  "  pm.expect(json.objectKey).to.be.a('string').and.include('documents/');",
+                  "});",
+                  "",
+                  "pm.test('message succès', () => {",
+                  "  pm.expect(json.message).to.include('succès');",
+                  "});",
+                  "",
+                  "// Stocker l'ID pour les requêtes suivantes",
+                  "if (json.id) {",
+                  "  pm.environment.set('document_id', json.id);",
+                  "  console.log('✅ document_id stocké:', json.id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Sélectionner un fichier PDF (max 50 Mo)"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/documents/upload",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "upload"]
+            },
+            "description": "Upload un PDF vers MinIO. Sélectionner le fichier dans l'onglet Body > form-data."
+          }
+        },
+        {
+          "name": "POST /documents/upload — Non-PDF (400 attendu)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 400 Bad Request', () => pm.response.to.have.status(400));",
+                  "",
+                  "const json = pm.response.json();",
+                  "pm.test('message erreur contient PDF', () => {",
+                  "  const detail = json.detail || json.message || '';",
+                  "  pm.expect(detail.toLowerCase()).to.include('pdf');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "",
+                  "description": "Sélectionner un fichier NON-PDF (ex: .txt, .docx) pour tester le rejet"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/documents/upload",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "upload"]
+            },
+            "description": "Vérifie que l'API rejette les fichiers non-PDF avec une erreur 400."
+          }
+        },
+        {
+          "name": "GET /documents — Liste mes documents",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('content est un tableau', () => {",
+                  "  pm.expect(json.content).to.be.an('array');",
+                  "});",
+                  "",
+                  "pm.test('pagination cohérente', () => {",
+                  "  pm.expect(json.page).to.eql(0);",
+                  "  pm.expect(json.totalElements).to.be.at.least(0);",
+                  "});",
+                  "",
+                  "// Stocker le premier ID si disponible",
+                  "if (json.content && json.content.length > 0) {",
+                  "  pm.environment.set('document_id', json.content[0].id);",
+                  "  console.log('document_id stocké depuis la liste:', json.content[0].id);",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents?page=0&size=10",
+              "host": ["{{base_url}}"],
+              "path": ["documents"],
+              "query": [
+                { "key": "page", "value": "0" },
+                { "key": "size", "value": "10" }
+              ]
+            },
+            "description": "Retourne les documents de l'enseignant connecté, paginés."
+          }
+        },
+        {
+          "name": "GET /documents/{id} — Détail document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('id correspond', () => {",
+                  "  pm.expect(json.id).to.eql(pm.environment.get('document_id'));",
+                  "});",
+                  "",
+                  "pm.test('originalFilename présent', () => {",
+                  "  pm.expect(json.originalFilename).to.be.a('string');",
+                  "});",
+                  "",
+                  "pm.test('bucketName présent', () => {",
+                  "  pm.expect(json.bucketName).to.be.a('string');",
+                  "});",
+                  "",
+                  "pm.test('objectKey présent', () => {",
+                  "  pm.expect(json.objectKey).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Détail d'un document. Utilise `document_id` stocké par l'upload ou la liste."
+          }
+        },
+        {
+          "name": "GET /documents/{id}/download-url — URL de téléchargement",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 200 OK', () => pm.response.to.have.status(200));",
+                  "",
+                  "const json = pm.response.json();",
+                  "",
+                  "pm.test('url présente', () => {",
+                  "  pm.expect(json.url).to.be.a('string').and.include('http');",
+                  "});",
+                  "",
+                  "pm.test('url contient minio', () => {",
+                  "  pm.expect(json.url).to.include('minio').or.include('9000').or.include('X-Amz');",
+                  "});",
+                  "",
+                  "// Stocker l'URL pour vérification",
+                  "if (json.url) pm.environment.set('download_url', json.url);"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}/download-url",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "{{document_id}}", "download-url"]
+            },
+            "description": "Génère une URL présignée MinIO valable 1 heure pour télécharger le PDF."
+          }
+        },
+        {
+          "name": "DELETE /documents/{id} — Supprimer document",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 204 No Content', () => pm.response.to.have.status(204));",
+                  "",
+                  "// Vérification que la suppression est idempotente",
+                  "pm.test('Corps vide', () => {",
+                  "  pm.expect(pm.response.text()).to.be.empty;",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "⚠️ Supprime définitivement le document de MinIO et de la BDD."
+          }
+        },
+        {
+          "name": "GET /documents/{id} — Après suppression (404 attendu)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status 404 Not Found', () => pm.response.to.have.status(404));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/documents/{{document_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["documents", "{{document_id}}"]
+            },
+            "description": "Vérifie que le document supprimé retourne bien 404."
+          }
+        }
+      ]
+    }
+  ]
+}
