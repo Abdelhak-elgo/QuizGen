@@ -1,0 +1,72 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nlp-service
+  namespace: quizgen
+  labels:
+    app: nlp-service
+    app.kubernetes.io/part-of: quizgen-platform
+  annotations:
+    prometheus.io/scrape: "true"
+    prometheus.io/path: "/metrics"
+    prometheus.io/port: "8000"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nlp-service
+  template:
+    metadata:
+      labels:
+        app: nlp-service
+      annotations:
+        prometheus.io/scrape: "true"
+        prometheus.io/path: "/metrics"
+        prometheus.io/port: "8000"
+    spec:
+      containers:
+        - name: nlp-service
+          image: ghcr.io/abdelhak-elgo/quizgen-nlp:latest
+          ports:
+            - containerPort: 8000
+          envFrom:
+            - configMapRef:
+                name: nlp-config
+          env:
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASS)@redis:6379/0"
+            - name: REDIS_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: REDIS_PASS
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: MINIO_SECRET_KEY
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 20
+            periodSeconds: 15
+            failureThreshold: 5
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 40
+            periodSeconds: 30
+          resources:
+            requests:
+              memory: "2Gi"    # bert-score + spacy en mémoire
+              cpu: "1000m"
+            limits:
+              memory: "6Gi"
+              cpu: "2000m"

@@ -1,0 +1,71 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nlp-worker
+  namespace: quizgen
+  labels:
+    app: nlp-worker
+    app.kubernetes.io/part-of: quizgen-platform
+spec:
+  replicas: 2   # Scalable horizontalement selon la charge
+  selector:
+    matchLabels:
+      app: nlp-worker
+  template:
+    metadata:
+      labels:
+        app: nlp-worker
+    spec:
+      containers:
+        - name: nlp-worker
+          image: ghcr.io/abdelhak-elgo/quizgen-nlp:latest
+          command:
+            - celery
+            - -A
+            - app.celery_app
+            - worker
+            - --loglevel=info
+            - --concurrency=2
+            - -Q
+            - celery
+          envFrom:
+            - configMapRef:
+                name: nlp-config
+          env:
+            - name: REDIS_URL
+              value: "redis://:$(REDIS_PASS)@redis:6379/0"
+            - name: REDIS_PASS
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: REDIS_PASS
+            - name: MINIO_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: MINIO_ACCESS_KEY
+            - name: MINIO_SECRET_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: quizgen-secrets
+                  key: MINIO_SECRET_KEY
+          livenessProbe:
+            exec:
+              command:
+                - celery
+                - -A
+                - app.celery_app
+                - inspect
+                - ping
+                - -d
+                - celery@$HOSTNAME
+            initialDelaySeconds: 30
+            periodSeconds: 60
+            timeoutSeconds: 10
+          resources:
+            requests:
+              memory: "2Gi"
+              cpu: "1000m"
+            limits:
+              memory: "6Gi"
+              cpu: "2000m"
