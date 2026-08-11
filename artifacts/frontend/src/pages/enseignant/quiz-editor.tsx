@@ -1,135 +1,117 @@
-import { useState } from 'react';
 import { useRoute, useLocation } from 'wouter';
-import { 
-  useGetQuiz, 
-  useUpdateQuizQuestions, 
+import { useState } from 'react';
+import {
+  useGetQuiz,
+  useUpdateQuizQuestions,
   getGetQuizQueryKey,
-  Question,
-  QuestionUpdateItem
+  QuestionUpdateItemType,
+  QuestionUpdateItemDifficulty,
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EnseignantLayout } from '@/components/layout/enseignant-layout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
-import { ArrowLeft, Save, Send, CheckCircle2, ChevronRight, ChevronDown } from 'lucide-react';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Textarea } from '@/components/ui/textarea';
+import { Separator } from '@/components/ui/separator';
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog';
 import { toast } from 'sonner';
+import {
+  ArrowLeft,
+  Check,
+  Download,
+  FileCode2,
+  Loader2,
+  Package,
+  Pencil,
+  Send,
+} from 'lucide-react';
+import { useScormExport, useMoodleExport } from '@/hooks/use-quiz-export';
+
+type Question = {
+  id: string;
+  type: string;
+  content: string;
+  options: string[] | null;
+  correctAnswer: string;
+  explanation: string | null;
+  difficulty: string;
+  position: number;
+};
+
+function questionTypeBadgeClass(type: string) {
+  return type === 'QCM'
+    ? 'bg-blue-100 text-blue-700 border-blue-200'
+    : type === 'OUVERTE'
+    ? 'bg-violet-100 text-violet-700 border-violet-200'
+    : 'bg-amber-100 text-amber-700 border-amber-200';
+}
+
+function difficultyBadgeClass(diff: string) {
+  return diff === 'FACILE'
+    ? 'bg-green-100 text-green-700 border-green-200'
+    : diff === 'DIFFICILE'
+    ? 'bg-red-100 text-red-700 border-red-200'
+    : 'bg-amber-100 text-amber-700 border-amber-200';
+}
 
 export default function QuizEditor() {
   const [match, params] = useRoute('/enseignant/quizzes/:id');
-  const quizId = params?.id || '';
-  const [, setLocation] = useLocation();
-  const queryClient = useQueryClient();
+  const [, navigate]    = useLocation();
+  const quizId          = params?.id || '';
+  const queryClient     = useQueryClient();
+
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editDraft, setEditDraft] = useState<Partial<Question>>({});
 
   const { data: quiz, isLoading } = useGetQuiz(quizId, {
-    query: {
-      enabled: !!quizId,
-      queryKey: getGetQuizQueryKey(quizId)
+    query: { enabled: !!quizId, queryKey: getGetQuizQueryKey(quizId) }
+  });
+
+  const updateMutation = useUpdateQuizQuestions({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetQuizQueryKey(quizId) });
+        toast.success('Questions enregistrées avec succès');
+      },
+      onError: () => toast.error('Erreur lors de l\'enregistrement'),
     }
   });
 
-  const updateQuiz = useUpdateQuizQuestions();
-  
-  // Local state for editing questions
-  const [editedQuestions, setEditedQuestions] = useState<Record<string, QuestionUpdateItem>>({});
-  const [expandedQs, setExpandedQs] = useState<Record<string, boolean>>({});
-
-  const toggleQ = (qId: string) => {
-    setExpandedQs(prev => ({ ...prev, [qId]: !prev[qId] }));
-  };
-
-  const initEdit = (q: Question) => {
-    if (!editedQuestions[q.id]) {
-      setEditedQuestions(prev => ({
-        ...prev,
-        [q.id]: {
-          id: q.id,
-          type: q.type,
-          content: q.content,
-          options: q.options || [],
-          correctAnswer: q.correctAnswer,
-          explanation: q.explanation || '',
-          difficulty: q.difficulty,
-          position: q.position,
-          keywords: q.keywords || []
-        }
-      }));
+  const publishMutation = useUpdateQuizQuestions({
+    mutation: {
+      onSuccess: () => {
+        queryClient.invalidateQueries({ queryKey: getGetQuizQueryKey(quizId) });
+        toast.success('Quiz publié — les étudiants peuvent maintenant le passer');
+      },
+      onError: () => toast.error('Erreur lors de la publication'),
     }
-  };
+  });
 
-  const getQ = (q: Question) => editedQuestions[q.id] || q;
-
-  const handleUpdateContent = (qId: string, content: string) => {
-    setEditedQuestions(prev => ({
-      ...prev,
-      [qId]: { ...prev[qId], content }
-    }));
-  };
-
-  const handleUpdateOption = (qId: string, idx: number, value: string) => {
-    setEditedQuestions(prev => {
-      const q = prev[qId];
-      if (!q || !q.options) return prev;
-      const newOptions = [...q.options];
-      newOptions[idx] = value;
-      return { ...prev, [qId]: { ...q, options: newOptions } };
-    });
-  };
-
-  const handleSetCorrect = (qId: string, value: string) => {
-    setEditedQuestions(prev => ({
-      ...prev,
-      [qId]: { ...prev[qId], correctAnswer: value }
-    }));
-  };
-
-  const handleSaveAll = async (publish = false) => {
-    if (!quiz || !quiz.questions) return;
-    
-    const finalQuestions: QuestionUpdateItem[] = quiz.questions.map(q => {
-      const edited = editedQuestions[q.id];
-      if (edited) return edited;
-      return {
-        id: q.id,
-        type: q.type,
-        content: q.content,
-        options: q.options,
-        correctAnswer: q.correctAnswer,
-        explanation: q.explanation,
-        difficulty: q.difficulty,
-        position: q.position,
-        keywords: q.keywords
-      };
-    });
-
-    try {
-      await updateQuiz.mutateAsync({
-        id: quizId,
-        data: {
-          questions: finalQuestions,
-          publish
-        }
-      });
-      
-      queryClient.invalidateQueries({ queryKey: getGetQuizQueryKey(quizId) });
-      toast.success(publish ? 'Quiz publié avec succès !' : 'Modifications sauvegardées.');
-      
-      if (publish) {
-        setLocation('/enseignant');
-      }
-    } catch (e) {
-      toast.error('Erreur lors de la sauvegarde');
-    }
-  };
+  const { exportScorm, isPending: scormPending, error: scormError } = useScormExport();
+  const { exportMoodle, isPending: moodlePending, error: moodleError } = useMoodleExport();
 
   if (!match) return null;
 
   if (isLoading) {
     return (
       <EnseignantLayout>
-        <div className="flex items-center justify-center h-64">Chargement du quiz...</div>
+        <div className="flex items-center justify-center p-12 text-muted-foreground">
+          <Loader2 className="animate-spin mr-2" size={18} />
+          Chargement du quiz…
+        </div>
       </EnseignantLayout>
     );
   }
@@ -137,149 +119,291 @@ export default function QuizEditor() {
   if (!quiz) {
     return (
       <EnseignantLayout>
-        <div className="text-center py-12">Quiz introuvable.</div>
+        <div className="text-center p-12 text-muted-foreground">Quiz introuvable.</div>
       </EnseignantLayout>
     );
   }
 
-  const isPublished = quiz.quizStatus === 'PUBLISHED';
+  const questions: Question[] = (quiz as any).questions ?? [];
+  const isPublished = (quiz as any).quizStatus === 'PUBLISHED';
+
+  function startEdit(q: Question) {
+    setEditingId(q.id);
+    setEditDraft({
+      content:       q.content,
+      correctAnswer: q.correctAnswer,
+      explanation:   q.explanation ?? '',
+      options:       q.options ?? [],
+      difficulty:    q.difficulty,
+    });
+  }
+
+  function saveEdit(q: Question) {
+    const updated: Question[] = questions.map(qq =>
+      qq.id === q.id ? { ...qq, ...editDraft } : qq
+    );
+
+    const questionsPayload = updated.map(qu => ({
+      id:            qu.id,
+      type:          qu.type as QuestionUpdateItemType,
+      content:       qu.content,
+      options:       qu.options,
+      correctAnswer: qu.correctAnswer,
+      explanation:   qu.explanation,
+      difficulty:    qu.difficulty as QuestionUpdateItemDifficulty,
+      position:      qu.position,
+    }));
+
+    updateMutation.mutate({
+      id: quizId,
+      data: { questions: questionsPayload, publish: false }
+    });
+    setEditingId(null);
+  }
+
+  function handlePublish() {
+    const questionsPayload = questions.map(q => ({
+      id:            q.id,
+      type:          q.type as QuestionUpdateItemType,
+      content:       q.content,
+      options:       q.options,
+      correctAnswer: q.correctAnswer,
+      explanation:   q.explanation,
+      difficulty:    q.difficulty as QuestionUpdateItemDifficulty,
+      position:      q.position,
+    }));
+    publishMutation.mutate({
+      id: quizId,
+      data: { questions: questionsPayload, publish: true }
+    });
+  }
+
+  const quizTitle = quiz?.title ?? 'quiz';
+
+  function handleScormExport() {
+    exportScorm(quizId, quizTitle);
+    if (scormError) toast.error(scormError);
+  }
+
+  function handleMoodleExport() {
+    exportMoodle(quizId, quizTitle);
+    if (moodleError) toast.error(moodleError);
+  }
 
   return (
     <EnseignantLayout>
       <div className="max-w-4xl mx-auto space-y-6">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+
+        {/* Header */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-3">
-            <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
+            <Button variant="ghost" size="icon" onClick={() => navigate('/enseignant')}>
               <ArrowLeft size={20} />
             </Button>
             <div>
-              <div className="flex items-center gap-2">
-                <h1 className="text-2xl font-bold tracking-tight">{quiz.title}</h1>
-                <Badge variant={isPublished ? 'default' : 'secondary'} className={isPublished ? 'bg-green-600' : ''}>
+              <h1 className="text-2xl font-bold tracking-tight">{quiz.title}</h1>
+              <p className="text-sm text-muted-foreground mt-0.5">
+                {questions.length} question{questions.length !== 1 ? 's' : ''} &nbsp;·&nbsp;
+                <span className={`font-medium ${isPublished ? 'text-green-600' : 'text-amber-600'}`}>
                   {isPublished ? 'Publié' : 'Brouillon'}
-                </Badge>
-              </div>
-              <p className="text-sm text-muted-foreground mt-1">Généré à partir de: {quiz.documentName}</p>
+                </span>
+              </p>
             </div>
           </div>
-          
-          <div className="flex gap-2">
+
+          {/* Actions */}
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Export SCORM */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleScormExport}
+              disabled={scormPending || !isPublished}
+              title={!isPublished ? 'Publiez le quiz avant d\'exporter' : 'Télécharger l\'archive SCORM 2004'}
+            >
+              {scormPending ? <Loader2 size={15} className="animate-spin mr-1.5" /> : <Package size={15} className="mr-1.5" />}
+              SCORM 2004
+            </Button>
+
+            {/* Export Moodle */}
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={handleMoodleExport}
+              disabled={moodlePending || !isPublished}
+              title={!isPublished ? 'Publiez le quiz avant d\'exporter' : 'Télécharger le fichier Moodle XML'}
+            >
+              {moodlePending ? <Loader2 size={15} className="animate-spin mr-1.5" /> : <FileCode2 size={15} className="mr-1.5" />}
+              Moodle XML
+            </Button>
+
+            {/* Publier */}
             {!isPublished && (
-              <>
-                <Button variant="outline" onClick={() => handleSaveAll(false)} disabled={updateQuiz.isPending}>
-                  <Save size={16} className="mr-2" />
-                  Sauvegarder
-                </Button>
-                <Button onClick={() => handleSaveAll(true)} disabled={updateQuiz.isPending}>
-                  <Send size={16} className="mr-2" />
-                  Publier
-                </Button>
-              </>
+              <AlertDialog>
+                <AlertDialogTrigger asChild>
+                  <Button size="sm" disabled={publishMutation.isPending}>
+                    {publishMutation.isPending
+                      ? <Loader2 size={15} className="animate-spin mr-1.5" />
+                      : <Send size={15} className="mr-1.5" />}
+                    Publier le quiz
+                  </Button>
+                </AlertDialogTrigger>
+                <AlertDialogContent>
+                  <AlertDialogHeader>
+                    <AlertDialogTitle>Publier ce quiz ?</AlertDialogTitle>
+                    <AlertDialogDescription>
+                      Une fois publié, le quiz sera visible par les étudiants lors des sessions.
+                      Vous pourrez toujours modifier les questions après publication.
+                    </AlertDialogDescription>
+                  </AlertDialogHeader>
+                  <AlertDialogFooter>
+                    <AlertDialogCancel>Annuler</AlertDialogCancel>
+                    <AlertDialogAction onClick={handlePublish}>Publier</AlertDialogAction>
+                  </AlertDialogFooter>
+                </AlertDialogContent>
+              </AlertDialog>
             )}
           </div>
         </div>
 
+        {/* Export hint — si non publié */}
+        {!isPublished && (
+          <div className="flex items-start gap-2 p-3 bg-amber-50 border border-amber-100 rounded-lg text-sm text-amber-800">
+            <Download size={15} className="mt-0.5 shrink-0" />
+            <span>Publiez ce quiz pour activer les exports SCORM et Moodle XML.</span>
+          </div>
+        )}
+
+        {/* Liste des questions */}
         <div className="space-y-4">
-          {(quiz.questions || []).map((q, i) => {
-            const isExpanded = expandedQs[q.id];
-            const currentQ = getQ(q) as any;
-            
+          {questions.map((q, i) => {
+            const isEditing = editingId === q.id;
+
             return (
-              <Card key={q.id} className={editedQuestions[q.id] ? 'border-primary/50' : ''}>
-                <div 
-                  className="flex items-center justify-between p-4 cursor-pointer hover:bg-slate-50 transition-colors"
-                  onClick={() => {
-                    toggleQ(q.id);
-                    if (!isExpanded && !isPublished) initEdit(q);
-                  }}
-                >
-                  <div className="flex items-center gap-3 font-medium">
-                    <span className="w-6 text-muted-foreground">{i + 1}.</span>
-                    <Badge variant="outline" className="text-xs bg-card">
-                      {currentQ.type}
-                    </Badge>
-                    <span className="truncate max-w-md md:max-w-xl">{currentQ.content}</span>
+              <Card key={q.id} className={isEditing ? 'ring-2 ring-primary/30' : ''}>
+                <CardHeader className="pb-2">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-semibold text-muted-foreground">Q{i + 1}</span>
+                      <Badge variant="outline" className={`text-xs ${questionTypeBadgeClass(q.type)}`}>
+                        {q.type}
+                      </Badge>
+                      <Badge variant="outline" className={`text-xs ${difficultyBadgeClass(q.difficulty)}`}>
+                        {q.difficulty}
+                      </Badge>
+                    </div>
+                    {!isEditing && (
+                      <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => startEdit(q)}>
+                        <Pencil size={14} />
+                      </Button>
+                    )}
                   </div>
-                  {isExpanded ? <ChevronDown size={20} className="text-muted-foreground" /> : <ChevronRight size={20} className="text-muted-foreground" />}
-                </div>
+                </CardHeader>
 
-                {isExpanded && (
-                  <CardContent className="pt-0 pb-6 px-4 sm:px-12 border-t mt-2">
-                    <div className="mt-4 space-y-4">
-                      {isPublished ? (
-                        <>
-                          <div className="p-3 bg-slate-50 rounded-md border text-sm">{currentQ.content}</div>
-                          {currentQ.type === 'QCM' && currentQ.options && (
-                            <div className="space-y-2 mt-4">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase">Options</p>
-                              {currentQ.options.map((opt: string, idx: number) => (
-                                <div key={idx} className={`p-2 border rounded-md text-sm flex justify-between ${opt === currentQ.correctAnswer ? 'bg-green-50 border-green-200 text-green-800 font-medium' : 'bg-card'}`}>
-                                  <span>{opt}</span>
-                                  {opt === currentQ.correctAnswer && <CheckCircle2 size={16} className="text-green-600" />}
-                                </div>
-                              ))}
-                            </div>
-                          )}
-                          {currentQ.type !== 'QCM' && (
-                            <div className="space-y-2 mt-4">
-                              <p className="text-xs font-semibold text-muted-foreground uppercase">Réponse attendue</p>
-                              <div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm text-green-800">
-                                {currentQ.correctAnswer}
+                <CardContent className="space-y-4">
+                  {isEditing ? (
+                    /* ── Mode édition ── */
+                    <div className="space-y-4">
+                      <div className="space-y-1.5">
+                        <Label>Énoncé</Label>
+                        <Textarea
+                          value={editDraft.content ?? ''}
+                          onChange={e => setEditDraft(d => ({ ...d, content: e.target.value }))}
+                          rows={3}
+                        />
+                      </div>
+
+                      {q.type === 'QCM' && (
+                        <div className="space-y-1.5">
+                          <Label>Options (une par ligne)</Label>
+                          <Textarea
+                            value={(editDraft.options ?? []).join('\n')}
+                            onChange={e =>
+                              setEditDraft(d => ({
+                                ...d,
+                                options: e.target.value.split('\n').filter(Boolean),
+                              }))
+                            }
+                            rows={4}
+                            placeholder="Option 1&#10;Option 2&#10;Option 3&#10;Option 4"
+                          />
+                        </div>
+                      )}
+
+                      <div className="space-y-1.5">
+                        <Label>Réponse correcte</Label>
+                        <Input
+                          value={editDraft.correctAnswer ?? ''}
+                          onChange={e => setEditDraft(d => ({ ...d, correctAnswer: e.target.value }))}
+                        />
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <Label>Explication (optionnel)</Label>
+                        <Textarea
+                          value={editDraft.explanation ?? ''}
+                          onChange={e => setEditDraft(d => ({ ...d, explanation: e.target.value }))}
+                          rows={2}
+                        />
+                      </div>
+
+                      <div className="flex gap-2 pt-2">
+                        <Button size="sm" onClick={() => saveEdit(q)} disabled={updateMutation.isPending}>
+                          {updateMutation.isPending
+                            ? <Loader2 size={14} className="animate-spin mr-1.5" />
+                            : <Check size={14} className="mr-1.5" />}
+                          Enregistrer
+                        </Button>
+                        <Button size="sm" variant="ghost" onClick={() => setEditingId(null)}>
+                          Annuler
+                        </Button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* ── Mode lecture ── */
+                    <div className="space-y-3">
+                      <p className="text-base font-medium leading-relaxed">{q.content}</p>
+
+                      {q.type === 'QCM' && q.options && (
+                        <div className="grid gap-1.5">
+                          {q.options.map((opt, oi) => {
+                            const isCorrect = opt.trim().toLowerCase() === q.correctAnswer.trim().toLowerCase();
+                            return (
+                              <div
+                                key={oi}
+                                className={`px-3 py-2 rounded-md border text-sm flex items-center gap-2 ${
+                                  isCorrect
+                                    ? 'bg-green-50 border-green-200 text-green-900 font-medium'
+                                    : 'bg-slate-50 border-slate-200 text-slate-700'
+                                }`}
+                              >
+                                {isCorrect && <Check size={13} className="text-green-600 shrink-0" />}
+                                {opt}
                               </div>
-                            </div>
+                            );
+                          })}
+                        </div>
+                      )}
+
+                      {q.type !== 'QCM' && (
+                        <div className="p-3 bg-green-50 border border-green-200 rounded-md text-sm">
+                          <span className="font-semibold text-green-800">Réponse attendue : </span>
+                          <span className="text-green-900">{q.correctAnswer}</span>
+                          {(q.type === 'OUVERTE') && (
+                            <span className="ml-2 text-xs text-violet-600 font-medium">(BERTScore)</span>
                           )}
-                        </>
-                      ) : (
+                        </div>
+                      )}
+
+                      {q.explanation && (
                         <>
-                          <div className="space-y-1.5">
-                            <label className="text-xs font-medium text-foreground">Énoncé de la question</label>
-                            <Textarea 
-                              value={currentQ.content} 
-                              onChange={(e) => handleUpdateContent(q.id, e.target.value)}
-                              className="min-h-[80px]"
-                            />
-                          </div>
-
-                          {currentQ.type === 'QCM' && currentQ.options && (
-                            <div className="space-y-3 pt-2">
-                              <label className="text-xs font-medium text-foreground">Options (cochez la bonne réponse)</label>
-                              <div className="space-y-2">
-                                {currentQ.options.map((opt: string, idx: number) => (
-                                  <div key={idx} className="flex items-center gap-3">
-                                    <div 
-                                      className="flex-shrink-0 cursor-pointer"
-                                      onClick={() => handleSetCorrect(q.id, opt)}
-                                    >
-                                      <div className={`w-5 h-5 rounded-full border flex items-center justify-center ${opt === currentQ.correctAnswer ? 'bg-green-500 border-green-500' : 'border-slate-300'}`}>
-                                        {opt === currentQ.correctAnswer && <div className="w-2 h-2 bg-white rounded-full" />}
-                                      </div>
-                                    </div>
-                                    <Input 
-                                      value={opt} 
-                                      onChange={(e) => handleUpdateOption(q.id, idx, e.target.value)} 
-                                      className={opt === currentQ.correctAnswer ? 'border-green-200 bg-green-50/50' : ''}
-                                    />
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-
-                          {currentQ.type !== 'QCM' && (
-                            <div className="space-y-1.5 pt-2">
-                              <label className="text-xs font-medium text-foreground">Réponse modèle / attendue</label>
-                              <Textarea 
-                                value={currentQ.correctAnswer} 
-                                onChange={(e) => handleSetCorrect(q.id, e.target.value)}
-                                className="min-h-[80px]"
-                              />
-                            </div>
-                          )}
+                          <Separator />
+                          <p className="text-sm text-muted-foreground italic">{q.explanation}</p>
                         </>
                       )}
                     </div>
-                  </CardContent>
-                )}
+                  )}
+                </CardContent>
               </Card>
             );
           })}

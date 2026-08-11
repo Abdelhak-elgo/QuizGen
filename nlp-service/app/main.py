@@ -11,13 +11,18 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from app.bert_scorer import BertScorer
 from app.celery_app import celery_app
 from app.config import get_settings
 from app.llm_client import ping_ollama
 from app.models import (
+    BatchScoreRequest,
+    BatchScoreResponse,
     GenerateRequest,
     GenerateResponse,
     GeneratedQuestion,
+    ScoreRequest,
+    ScoreResponse,
     TaskStatus,
 )
 from app.tasks import generate_quiz_task
@@ -31,9 +36,10 @@ app = FastAPI(
         "Microservice de traitement NLP et génération de questions pédagogiques "
         "via SpaCy, KeyBERT et Mistral/Ollama. "
         "La génération est asynchrone (Celery + Redis) — "
-        "soumettre via POST /generate, suivre via GET /status/{task_id}."
+        "soumettre via POST /generate, suivre via GET /status/{task_id}.\n\n"
+        "**BERTScore** : POST /score pour corriger les réponses ouvertes (RoBERTa-large)."
     ),
-    version="2.0.0",
+    version="3.0.0",
 )
 
 
@@ -50,6 +56,7 @@ async def health() -> Dict[str, Any]:
     - ollama_available : True si Ollama répond et que le modèle est chargé
     - redis_available : True si Redis est accessible
     - ollama_model : nom du modèle LLM utilisé
+    - bert_score_available : True si bert-score est installé
     """
     # Ping Ollama
     ollama_ok = ping_ollama()
@@ -63,6 +70,10 @@ async def health() -> Dict[str, Any]:
     except Exception:
         pass
 
+    # Vérifier bert-score
+    scorer = BertScorer.get_instance()
+    bert_ok = scorer._check_available()
+
     overall = "ok" if ollama_ok and redis_ok else "degraded"
 
     return {
@@ -71,6 +82,7 @@ async def health() -> Dict[str, Any]:
         "ollama_available": ollama_ok,
         "ollama_model": settings.ollama_model,
         "redis_available": redis_ok,
+        "bert_score_available": bert_ok,
     }
 
 
@@ -166,6 +178,97 @@ async def get_status(task_id: str) -> TaskStatus:
 
     # États Celery non gérés (ex: REVOKED, RETRY)
     return TaskStatus(task_id=task_id, status=state)
+
+
+# ── BERTScore ─────────────────────────────────────────────────────────────────
+
+def _build_score_response(req: ScoreRequest) -> ScoreResponse:
+    """Calcule le BERTScore pour un seul item et construit la réponse."""
+    scorer = BertScorer.get_instance()
+    result = scorer.score(req.candidate, req.reference)
+    partial = scorer.partial_score(result.f1)
+
+    if partial >= 1.0:
+        label = "CORRECT"
+    elif partial > 0.0:
+        label = "PARTIEL"
+    else:
+        label = "INCORRECT"
+
+    return ScoreResponse(
+        question_id=req.question_id,
+        f1=result.f1,
+        precision=result.precision,
+        recall=result.recall,
+        partial_score=round(partial, 4),
+        model=result.model,
+        label=label,
+    )
+
+
+@app.post(
+    "/score",
+    response_model=ScoreResponse,
+    tags=["BERTScore"],
+    summary="Corriger une réponse ouverte (BERTScore RoBERTa)",
+)
+async def score_answer(request: ScoreRequest) -> ScoreResponse:
+    """
+    Calcule le BERTScore entre la réponse d'un étudiant et la réponse de référence.
+
+    ### Seuils de correction
+    | F1 BERTScore | Label      | Score partiel |
+    |---|---|---|
+    | ≥ 0.70       | CORRECT    | 1.0           |
+    | [0.50, 0.70[ | PARTIEL    | interpolé     |
+    | < 0.50       | INCORRECT  | 0.0           |
+
+    ### Retour
+    - **f1** : Score F1 BERTScore brut
+    - **partial_score** : Score normalisé [0, 1] selon les seuils
+    - **label** : CORRECT | PARTIEL | INCORRECT
+    - **model** : Modèle utilisé (roberta-large par défaut)
+    """
+    try:
+        return _build_score_response(request)
+    except Exception as exc:
+        logger.error("Erreur /score : %s", exc, exc_info=True)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erreur lors du calcul BERTScore : {exc}",
+        )
+
+
+@app.post(
+    "/score/batch",
+    response_model=BatchScoreResponse,
+    tags=["BERTScore"],
+    summary="Corriger plusieurs réponses ouvertes en une seule requête",
+)
+async def score_batch(request: BatchScoreRequest) -> BatchScoreResponse:
+    """
+    Calcule le BERTScore pour plusieurs paires (candidat, référence) en une seule requête.
+    Utilisé par Spring Boot pour traiter toutes les réponses ouvertes d'un Attempt.
+    """
+    if not request.items:
+        return BatchScoreResponse(results=[], total_items=0, available=True)
+
+    scorer = BertScorer.get_instance()
+    available = scorer._check_available()
+
+    results = []
+    for item in request.items:
+        try:
+            results.append(_build_score_response(item))
+        except Exception as exc:
+            logger.error("Erreur item %s : %s", item.question_id, exc)
+            results.append(ScoreResponse(
+                question_id=item.question_id,
+                f1=0.0, precision=0.0, recall=0.0,
+                partial_score=0.0, model="error", label="INCORRECT",
+            ))
+
+    return BatchScoreResponse(results=results, total_items=len(results), available=available)
 
 
 # ── Gestionnaire d'erreurs global ─────────────────────────────────────────────
