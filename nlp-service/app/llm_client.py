@@ -1,8 +1,15 @@
 """
-Client Ollama/Mistral pour la génération de questions pédagogiques.
+Client Ollama/Mistral — Génération CoT de questions pédagogiques.
 
-Gestion des templates de prompts par type de question (QCM, OUVERTE, EXERCICE),
-parsing JSON avec retry automatique (jusqu'à LLM_MAX_RETRIES tentatives).
+Architecture :
+  build_cot_prompt (chain_of_thought.py)
+    → Ollama /api/generate (Mistral)
+      → _extract_json_from_text (parsing robuste)
+        → _parse_questions (validation + strip du champ "reasoning")
+          → List[GeneratedQuestion]
+
+Le champ "reasoning" produit par le CoT est loggué en DEBUG pour traçabilité
+mais n'est pas exposé dans la réponse finale à l'utilisateur.
 """
 import json
 import logging
@@ -12,130 +19,85 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
+from app.chain_of_thought import SYSTEM_PROMPT_COT, build_cot_prompt
 from app.config import get_settings
 from app.models import Difficulty, GeneratedQuestion, QuestionType
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
 
-# ── Templates de prompts ──────────────────────────────────────────────────────
-
-_SYSTEM_PROMPT = """Tu es un expert en pédagogie universitaire francophone.
-Tu génères des questions pédagogiques précises, claires et adaptées au niveau Master.
-Tu réponds UNIQUEMENT en JSON valide, sans texte avant ni après le JSON.
-Ne génère JAMAIS de commentaires, d'explications ou de texte en dehors du JSON."""
-
-_QCM_TEMPLATE = """À partir du texte suivant, génère {nb} question(s) QCM de niveau {difficulty}.
-Chaque QCM doit avoir EXACTEMENT 4 options et UNE seule bonne réponse.
-
-Texte source :
-\"\"\"
-{context}
-\"\"\"
-
-Concepts clés à couvrir : {keywords}
-
-Réponds avec un tableau JSON de la forme :
-[
-  {{
-    "type": "QCM",
-    "content": "Question claire et précise ?",
-    "options": ["Option A", "Option B", "Option C", "Option D"],
-    "correct_answer": "Option A",
-    "explanation": "Explication courte de la bonne réponse.",
-    "difficulty": "{difficulty}",
-    "keywords": ["concept1", "concept2"]
-  }}
-]"""
-
-_OUVERTE_TEMPLATE = """À partir du texte suivant, génère {nb} question(s) ouverte(s) de niveau {difficulty}.
-Les questions doivent encourager la réflexion et la synthèse.
-
-Texte source :
-\"\"\"
-{context}
-\"\"\"
-
-Concepts clés à couvrir : {keywords}
-
-Réponds avec un tableau JSON de la forme :
-[
-  {{
-    "type": "OUVERTE",
-    "content": "Question ouverte invitant à la réflexion ?",
-    "options": null,
-    "correct_answer": "Réponse modèle complète attendue de l'étudiant.",
-    "explanation": "Points clés que la réponse doit aborder.",
-    "difficulty": "{difficulty}",
-    "keywords": ["concept1", "concept2"]
-  }}
-]"""
-
-_EXERCICE_TEMPLATE = """À partir du texte suivant, génère {nb} exercice(s) pratique(s) de niveau {difficulty}.
-Les exercices doivent être concrets et applicables.
-
-Texte source :
-\"\"\"
-{context}
-\"\"\"
-
-Concepts clés à couvrir : {keywords}
-
-Réponds avec un tableau JSON de la forme :
-[
-  {{
-    "type": "EXERCICE",
-    "content": "Énoncé de l'exercice pratique.",
-    "options": null,
-    "correct_answer": "Solution complète étape par étape.",
-    "explanation": "Démarche et concepts mobilisés.",
-    "difficulty": "{difficulty}",
-    "keywords": ["concept1", "concept2"]
-  }}
-]"""
-
-_TEMPLATES = {
-    QuestionType.QCM: _QCM_TEMPLATE,
-    QuestionType.OUVERTE: _OUVERTE_TEMPLATE,
-    QuestionType.EXERCICE: _EXERCICE_TEMPLATE,
-}
 
 # ── Extraction JSON robuste ───────────────────────────────────────────────────
 
 def _extract_json_from_text(text: str) -> Optional[Any]:
     """
-    Tente d'extraire un JSON valide du texte retourné par Mistral,
-    même si le modèle ajoute du texte parasite avant/après.
+    Extrait un JSON valide du texte retourné par Mistral.
+
+    Stratégies tentées dans l'ordre :
+      1. Parse direct du texte (cas idéal)
+      2. Extraction du premier tableau [...] par regex + DOTALL
+      3. Extraction du premier objet {...} par regex + DOTALL
+      4. Recherche par accolade/crochet équilibré (cas JSON imbriqué avec texte parasite)
     """
-    # Chercher un tableau JSON [ ... ] ou objet { ... }
-    for pattern in (r"\[.*\]", r"\{.*\}"):
-        match = re.search(pattern, text, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group())
-            except json.JSONDecodeError:
-                continue
+    text = text.strip()
+
+    # Stratégie 1 : parse direct
+    try:
+        return json.loads(text)
+    except json.JSONDecodeError:
+        pass
+
+    # Stratégie 2 : extraire un tableau JSON
+    match = re.search(r"\[.*\]", text, re.DOTALL)
+    if match:
+        try:
+            return json.loads(match.group())
+        except json.JSONDecodeError:
+            pass
+
+    # Stratégie 3 : extraire un objet JSON
+    match = re.search(r"\{.*\}", text, re.DOTALL)
+    if match:
+        try:
+            result = json.loads(match.group())
+            return [result] if isinstance(result, dict) else result
+        except json.JSONDecodeError:
+            pass
+
+    # Stratégie 4 : trouver le JSON par équilibrage de délimiteurs
+    for start_char, end_char in [("[", "]"), ("{", "}")]:
+        start_idx = text.find(start_char)
+        if start_idx == -1:
+            continue
+        depth = 0
+        for i, ch in enumerate(text[start_idx:], start=start_idx):
+            if ch == start_char:
+                depth += 1
+            elif ch == end_char:
+                depth -= 1
+                if depth == 0:
+                    candidate = text[start_idx:i + 1]
+                    try:
+                        result = json.loads(candidate)
+                        return [result] if isinstance(result, dict) else result
+                    except json.JSONDecodeError:
+                        break
+
+    logger.debug("Impossible d'extraire du JSON depuis : %.200s", text)
     return None
 
 
-def _build_prompt(
-    question_type: QuestionType,
-    context: str,
-    keywords: List[str],
-    nb: int,
+def _parse_questions(
+    raw: Any,
+    expected_type: QuestionType,
     difficulty: Difficulty,
-) -> str:
-    template = _TEMPLATES[question_type]
-    return template.format(
-        nb=nb,
-        difficulty=difficulty.value,
-        context=context[:3000],  # Limiter le contexte pour éviter de dépasser la fenêtre du LLM
-        keywords=", ".join(keywords[:10]) if keywords else "les concepts principaux du texte",
-    )
+) -> List[GeneratedQuestion]:
+    """
+    Convertit la sortie brute du LLM en liste de GeneratedQuestion validées.
 
-
-def _parse_questions(raw: Any, expected_type: QuestionType, difficulty: Difficulty) -> List[GeneratedQuestion]:
-    """Convertit la sortie brute du LLM en liste de GeneratedQuestion validées."""
+    Le champ "reasoning" (Chain-of-Thought) est extrait et loggué
+    mais pas conservé dans le modèle final.
+    """
     questions: List[GeneratedQuestion] = []
 
     if isinstance(raw, dict):
@@ -147,12 +109,18 @@ def _parse_questions(raw: Any, expected_type: QuestionType, difficulty: Difficul
     for item in raw:
         if not isinstance(item, dict):
             continue
+
+        # Extraire et logger le raisonnement CoT (pour traçabilité)
+        reasoning = item.pop("reasoning", None)
+        if reasoning:
+            logger.debug("CoT reasoning : %.300s", reasoning)
+
         try:
             q = GeneratedQuestion(
                 type=item.get("type", expected_type.value),
-                content=item.get("content", "").strip(),
+                content=(item.get("content") or "").strip(),
                 options=item.get("options"),
-                correct_answer=item.get("correct_answer", "").strip(),
+                correct_answer=(item.get("correct_answer") or "").strip(),
                 explanation=item.get("explanation"),
                 difficulty=item.get("difficulty", difficulty.value),
                 keywords=item.get("keywords", []),
@@ -174,41 +142,64 @@ def generate_questions(
     nb: int,
     difficulty: Difficulty,
     *,
+    bloom_level: str = "COMPREHENSION",
+    bloom_directive: str = "Demander d'expliquer le concept dans ses propres mots.",
+    domain: str = "general",
+    domain_suffix: str = "",
     max_retries: int | None = None,
 ) -> List[GeneratedQuestion]:
     """
-    Génère des questions via Mistral/Ollama avec retry automatique.
+    Génère des questions via Mistral/Ollama avec prompt Chain-of-Thought.
 
     Args:
-        context:       Texte source extrait du PDF.
-        keywords:      Concepts clés identifiés par le pipeline NLP.
-        question_type: Type de question (QCM, OUVERTE, EXERCICE).
-        nb:            Nombre de questions à générer.
-        difficulty:    Niveau de difficulté.
-        max_retries:   Nombre maximal de tentatives (défaut depuis Settings).
+        context:         Chunk de texte sémantiquement cohérent.
+        keywords:        Concepts clés extraits par KeyBERT + SpaCy.
+        question_type:   Type de question (QCM, OUVERTE, EXERCICE).
+        nb:              Nombre de questions à générer (recommandé 1-2 par chunk).
+        difficulty:      Niveau de difficulté.
+        bloom_level:     Niveau Bloom détecté pour ce chunk (ex: "ANALYSE").
+        bloom_directive: Instruction pédagogique injectée dans le prompt.
+        domain:          Domaine académique détecté (informatique, droit, etc.)
+        domain_suffix:   Suffixe de prompt spécifique au domaine.
+        max_retries:     Tentatives max (défaut depuis Settings).
 
     Returns:
-        Liste de GeneratedQuestion validées (peut être vide si le LLM échoue).
+        Liste de GeneratedQuestion (peut être vide si le LLM échoue).
     """
     max_retries = max_retries or settings.llm_max_retries
-    prompt = _build_prompt(question_type, context, keywords, nb, difficulty)
 
-    payload = {
+    # Construire le prompt CoT structuré
+    prompt = build_cot_prompt(
+        question_type=question_type,
+        context=context,
+        keywords=keywords,
+        nb=nb,
+        difficulty=difficulty,
+        bloom_level=bloom_level,
+        bloom_directive=bloom_directive,
+        domain=domain,
+        domain_suffix=domain_suffix,
+    )
+
+    payload: Dict[str, Any] = {
         "model": settings.ollama_model,
         "prompt": prompt,
-        "system": _SYSTEM_PROMPT,
+        "system": SYSTEM_PROMPT_COT,
         "stream": False,
         "options": {
             "temperature": settings.llm_temperature,
             "num_predict": 2048,
+            # Pénaliser la répétition — aide à diversifier les distracteurs QCM
+            "repeat_penalty": 1.1,
         },
     }
 
     for attempt in range(1, max_retries + 1):
         try:
             logger.info(
-                "Ollama — tentative %d/%d (type=%s, nb=%d)",
-                attempt, max_retries, question_type.value, nb,
+                "Ollama CoT — tentative %d/%d (type=%s, bloom=%s, nb=%d, domain=%s)",
+                attempt, max_retries,
+                question_type.value, bloom_level, nb, domain,
             )
             with httpx.Client(timeout=settings.ollama_timeout) as client:
                 resp = client.post(
@@ -218,36 +209,39 @@ def generate_questions(
                 resp.raise_for_status()
 
             response_text: str = resp.json().get("response", "")
-            logger.debug("Réponse brute LLM (trunc.) : %s...", response_text[:300])
+            logger.debug("Réponse LLM brute (trunc.) : %.300s", response_text)
 
             parsed = _extract_json_from_text(response_text)
             if parsed is None:
-                logger.warning("JSON introuvable dans la réponse — tentative %d", attempt)
+                logger.warning("JSON introuvable (tentative %d) — réponse : %.200s", attempt, response_text)
                 time.sleep(1)
                 continue
 
             questions = _parse_questions(parsed, question_type, difficulty)
             if questions:
                 logger.info(
-                    "✅ %d question(s) générée(s) (type=%s, tentative %d)",
-                    len(questions), question_type.value, attempt,
+                    "✅ %d question(s) générée(s) [type=%s, bloom=%s, tentative=%d]",
+                    len(questions), question_type.value, bloom_level, attempt,
                 )
                 return questions
 
-            logger.warning("Aucune question valide extraite — tentative %d", attempt)
+            logger.warning("Aucune question valide extraite (tentative %d)", attempt)
             time.sleep(1)
 
         except httpx.TimeoutException:
-            logger.error("Timeout Ollama — tentative %d/%d", attempt, max_retries)
+            logger.error("Timeout Ollama (tentative %d/%d)", attempt, max_retries)
             time.sleep(2)
         except httpx.HTTPStatusError as exc:
-            logger.error("Erreur HTTP Ollama %s — tentative %d", exc.response.status_code, attempt)
+            logger.error("Erreur HTTP Ollama %s (tentative %d)", exc.response.status_code, attempt)
             time.sleep(1)
         except Exception as exc:
             logger.error("Erreur inattendue Ollama : %s", exc, exc_info=True)
             time.sleep(1)
 
-    logger.error("Génération échouée après %d tentatives (type=%s).", max_retries, question_type.value)
+    logger.error(
+        "Génération échouée après %d tentatives [type=%s, bloom=%s].",
+        max_retries, question_type.value, bloom_level,
+    )
     return []
 
 
