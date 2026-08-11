@@ -3,7 +3,7 @@ QuizGen — Microservice FastAPI NLP
 Point d'entrée principal de l'application.
 """
 import logging
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import httpx
 import redis
@@ -11,10 +11,12 @@ from celery.result import AsyncResult
 from fastapi import FastAPI, HTTPException, status
 from fastapi.responses import JSONResponse
 
+from pydantic import BaseModel
+
 from app.bert_scorer import BertScorer
 from app.celery_app import celery_app
 from app.config import get_settings
-from app.metrics import record_bertscore, setup_prometheus
+from app.metrics import record_bertscore, record_evidence_retrieved, setup_prometheus
 from app.llm_client import ping_ollama
 from app.models import (
     BatchScoreRequest,
@@ -26,6 +28,7 @@ from app.models import (
     ScoreResponse,
     TaskStatus,
 )
+from app.rag_store import retrieve_evidence
 from app.tasks import generate_quiz_task
 
 logger = logging.getLogger(__name__)
@@ -277,6 +280,82 @@ async def score_batch(request: BatchScoreRequest) -> BatchScoreResponse:
             ))
 
     return BatchScoreResponse(results=results, total_items=len(results), available=available)
+
+
+# ── Evidence RAG ──────────────────────────────────────────────────────────────
+
+class EvidenceRequest(BaseModel):
+    """Corps de la requête POST /evidence."""
+    document_id: str
+    student_answer: str
+
+
+class EvidenceResponse(BaseModel):
+    """
+    Réponse de l'endpoint /evidence.
+
+    - evidence_text:    Passage du document le plus similaire à la réponse étudiant.
+                        Null si ChromaDB est indisponible ou si le document n'est pas indexé.
+    - similarity_score: Score de similarité cosinus [0, 1] entre la réponse et le passage.
+                        Null si evidence_text est null.
+    """
+    evidence_text: Optional[str] = None
+    similarity_score: Optional[float] = None
+
+
+@app.post(
+    "/evidence",
+    response_model=EvidenceResponse,
+    tags=["Evidence RAG"],
+    summary="Retrouver le passage source correspondant à une réponse étudiant",
+)
+async def get_evidence(request: EvidenceRequest) -> EvidenceResponse:
+    """
+    Utilise ChromaDB (indexé lors de la génération de quiz) pour retrouver
+    le passage du document source le plus proche de la réponse d'un étudiant.
+
+    Ce "passage-evidence" est retourné avec le score de correction BERTScore
+    pour permettre une correction explicable (XAI — Explainable AI) :
+    l'étudiant voit quel passage du cours sa réponse est censée couvrir.
+
+    ### Comportement de fallback
+    Si ChromaDB est indisponible ou si le document n'a pas encore été indexé
+    (cas de régression), retourne `{evidence_text: null, similarity_score: null}`
+    sans lever d'erreur — la correction BERTScore continue normalement.
+
+    ### Corps de la requête
+    - **document_id** : UUID du document (même identifiant que lors de la génération)
+    - **student_answer** : Réponse de l'étudiant (utilisée comme requête de similarité)
+    """
+    if not request.student_answer or not request.student_answer.strip():
+        return EvidenceResponse()
+
+    try:
+        result = retrieve_evidence(
+            document_id=request.document_id,
+            query_text=request.student_answer.strip(),
+            embedding_model=None,  # ChromaDB gère l'embedding en mode API
+        )
+        if result and result.get("text"):
+            similarity = float(result.get("similarity", 0.0))
+            record_evidence_retrieved(similarity, found=True)
+            logger.info(
+                "[evidence] doc_id=%s similarity=%.2f chunk_preview=%.60s...",
+                request.document_id, similarity, result["text"],
+            )
+            return EvidenceResponse(
+                evidence_text=result["text"],
+                similarity_score=round(similarity, 4),
+            )
+        else:
+            record_evidence_retrieved(0.0, found=False)
+            logger.debug("[evidence] doc_id=%s — aucun chunk trouvé", request.document_id)
+            return EvidenceResponse()
+
+    except Exception as exc:
+        logger.warning("[evidence] erreur pour doc_id=%s : %s", request.document_id, exc)
+        record_evidence_retrieved(0.0, found=False)
+        return EvidenceResponse()
 
 
 # ── Gestionnaire d'erreurs global ─────────────────────────────────────────────
