@@ -115,6 +115,16 @@ public class BertScoreClientImpl implements BertScoreClient {
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
+    /**
+     * Mappe les résultats bruts NLP en DTOs et enrichit chaque entrée avec son
+     * passage-evidence ChromaDB.
+     *
+     * <p><strong>Parallélisation :</strong> les appels /evidence sont lancés simultanément
+     * via {@code CompletableFuture.supplyAsync()} avec un budget total de 4 secondes.
+     * Même avec 5 questions ouvertes (cas extrême), la latence totale est bornée à 4 s
+     * au lieu de 5 × 3 s = 15 s. En pratique, les appels terminent en < 1 s si
+     * ChromaDB est local.</p>
+     */
     private List<BertScoreDetailDto> mapResults(
         List<Map<String, Object>> results,
         List<Question> questions,
@@ -124,21 +134,55 @@ public class BertScoreClientImpl implements BertScoreClient {
         Map<String, Question> qMap = new HashMap<>();
         for (Question q : questions) qMap.put(q.getId().toString(), q);
 
+        // ── Phase 1 : lancer tous les appels /evidence en parallèle ─────────
+        // Chaque future récupère l'evidence RAG pour une question (timeout individuel 3 s).
+        // Le budget global est limité à 4 s via allOf().get(4, SECONDS).
+        record EvidenceTask(String qId, String studentAnswer,
+                            java.util.concurrent.CompletableFuture<Map<String, Object>> future) {}
+
+        List<EvidenceTask> evidenceTasks = new ArrayList<>();
+        for (Map<String, Object> r : results) {
+            String qId = (String) r.getOrDefault("question_id", "");
+            if (qMap.get(qId) == null) continue;
+            String studentAnswer = studentAnswers.getOrDefault(qId, "");
+            var future = java.util.concurrent.CompletableFuture.supplyAsync(
+                () -> fetchEvidence(documentId, studentAnswer)
+            );
+            evidenceTasks.add(new EvidenceTask(qId, studentAnswer, future));
+        }
+
+        // Attendre toutes les futures avec budget 4 s max (non-bloquant sur timeout)
+        try {
+            java.util.concurrent.CompletableFuture.allOf(
+                evidenceTasks.stream()
+                    .map(EvidenceTask::future)
+                    .toArray(java.util.concurrent.CompletableFuture[]::new)
+            ).get(4, java.util.concurrent.TimeUnit.SECONDS);
+        } catch (Exception e) {
+            log.debug("Budget evidence RAG dépassé (4 s) — résultats partiels récupérés");
+        }
+
+        // ── Phase 2 : assembler les DTOs avec les evidences récupérées ───────
+        Map<String, Map<String, Object>> evidenceByQId = new HashMap<>();
+        for (EvidenceTask task : evidenceTasks) {
+            try {
+                Map<String, Object> ev = task.future().getNow(null);  // null si pas encore terminé
+                evidenceByQId.put(task.qId(), ev);
+            } catch (Exception e) {
+                evidenceByQId.put(task.qId(), null);
+            }
+        }
+
         List<BertScoreDetailDto> dtos = new ArrayList<>();
         for (Map<String, Object> r : results) {
             String qId = (String) r.getOrDefault("question_id", "");
             Question q = qMap.get(qId);
             if (q == null) continue;
 
-            String studentAnswer = studentAnswers.getOrDefault(qId, "");
-
-            // Récupérer l'evidence RAG pour cette réponse (timeout 3 s, non-bloquant)
-            Map<String, Object> evidenceChunk = fetchEvidence(documentId, studentAnswer);
-
             dtos.add(new BertScoreDetailDto(
                 qId,
                 q.getContent(),
-                studentAnswer,
+                studentAnswers.getOrDefault(qId, ""),
                 q.getCorrectAnswer(),
                 toDouble(r.get("f1")),
                 toDouble(r.get("precision")),
@@ -146,7 +190,7 @@ public class BertScoreClientImpl implements BertScoreClient {
                 toDouble(r.get("partial_score")),
                 (String) r.getOrDefault("label", "INCORRECT"),
                 (String) r.getOrDefault("model", "unavailable"),
-                evidenceChunk
+                evidenceByQId.get(qId)
             ));
         }
         return dtos;
