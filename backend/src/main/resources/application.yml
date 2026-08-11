@@ -47,7 +47,17 @@ springdoc:
     description: API REST pour la génération automatique de quiz pédagogiques
     version: 1.0.0
 
+# ── Microservice NLP (FastAPI) ────────────────────────────────────────────────
+nlp:
+  service:
+    url: ${NLP_SERVICE_URL:http://nlp-service:8000}
+    poll-interval-ms: ${NLP_POLL_INTERVAL_MS:3000}
+    timeout-ms: ${NLP_TIMEOUT_MS:300000}
+    connect-timeout-ms: 5000
+    read-timeout-ms: 120000
+
 logging:
   level:
     ma.quizgen: INFO
     org.springframework.security: WARN
+    org.springframework.web.client: WARN
