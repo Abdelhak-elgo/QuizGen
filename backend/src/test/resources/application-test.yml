@@ -1,0 +1,37 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:quizgen_test;DB_CLOSE_DELAY=-1;MODE=PostgreSQL;DEFAULT_NULL_ORDERING=HIGH
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.H2Dialect
+        format_sql: false
+    show-sql: false
+
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: http://localhost:8180/realms/quizgen
+
+# Désactiver le client NLP (mocké dans les tests)
+nlp:
+  service:
+    url: http://localhost:9999
+    poll-interval-ms: 100
+    timeout-ms: 5000
+    connect-timeout-ms: 1000
+    read-timeout-ms: 1000
+
+minio:
+  url: http://localhost:9000
+  access-key: minioadmin
+  secret-key: minioadmin
+  bucket-documents: documents
+  bucket-exports: exports
