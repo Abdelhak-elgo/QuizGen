@@ -1,8 +1,10 @@
 package ma.quizgen.service.impl;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ma.quizgen.dto.AttemptDto;
+import ma.quizgen.dto.BertScoreDetailDto;
 import ma.quizgen.dto.PageResponse;
 import ma.quizgen.dto.SubmitAnswersRequest;
 import ma.quizgen.entity.Attempt;
@@ -14,6 +16,7 @@ import ma.quizgen.repository.AttemptRepository;
 import ma.quizgen.repository.QuestionRepository;
 import ma.quizgen.repository.UserRepository;
 import ma.quizgen.service.AttemptService;
+import ma.quizgen.service.BertScoreClient;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -22,9 +25,8 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -34,6 +36,8 @@ public class AttemptServiceImpl implements AttemptService {
     private final AttemptRepository  attemptRepository;
     private final QuestionRepository questionRepository;
     private final UserRepository     userRepository;
+    private final BertScoreClient    bertScoreClient;
+    private final ObjectMapper       objectMapper;
 
     private User resolveUser(String keycloakId) {
         return userRepository.findByKeycloakId(keycloakId)
@@ -60,30 +64,76 @@ public class AttemptServiceImpl implements AttemptService {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Le temps de la session est écoulé");
         }
 
-        // Score QCM : exact match (insensible à la casse + trim)
-        // OUVERTE / EXERCICE : score 0 jusqu'à l'intégration BERTScore (Phase 5)
         List<Question> questions = questionRepository.findByQuiz_IdOrderByPositionAsc(
             attempt.getSession().getQuiz().getId());
 
         Map<String, String> answers = request.answers();
-        int score = 0;
+
+        // ── 1. Score QCM — exact match (insensible à la casse + trim) ─────────
+        int qcmScore = 0;
+        List<Question> openQuestions = new ArrayList<>();
+
         for (Question q : questions) {
-            if (q.getType() == QuestionType.QCM) {
-                String given = answers.get(q.getId().toString());
-                if (given != null && given.trim().equalsIgnoreCase(q.getCorrectAnswer().trim()))
-                    score++;
+            switch (q.getType()) {
+                case QCM -> {
+                    String given = answers.get(q.getId().toString());
+                    if (given != null && given.trim().equalsIgnoreCase(q.getCorrectAnswer().trim()))
+                        qcmScore++;
+                }
+                case OUVERTE, EXERCICE -> openQuestions.add(q);
+            }
+        }
+
+        // ── 2. Score BERTScore pour les questions ouvertes ────────────────────
+        List<BertScoreDetailDto> bertDetails = List.of();
+        double openScore = 0.0;
+
+        if (!openQuestions.isEmpty()) {
+            bertDetails = bertScoreClient.scoreOpenAnswers(openQuestions, answers);
+
+            // Score partiel BERTScore : somme des partial_score pour chaque question ouverte
+            openScore = bertDetails.stream()
+                .mapToDouble(BertScoreDetailDto::partialScore)
+                .sum();
+
+            log.info("BERTScore {} questions ouvertes — score partiel total={:.2f}",
+                openQuestions.size(), openScore);
+        }
+
+        // ── 3. Score final — QCM entiers + BERTScore partiels (arrondi) ───────
+        int totalScore = qcmScore + (int) Math.round(openScore);
+
+        // ── 4. Persistance des détails BERTScore en JSONB ─────────────────────
+        Map<String, Object> bertDetailsJson = null;
+        if (!bertDetails.isEmpty()) {
+            bertDetailsJson = new LinkedHashMap<>();
+            for (BertScoreDetailDto d : bertDetails) {
+                bertDetailsJson.put(d.questionId(), Map.of(
+                    "questionContent", d.questionContent(),
+                    "studentAnswer",   d.studentAnswer(),
+                    "referenceAnswer", d.referenceAnswer(),
+                    "f1",              d.f1(),
+                    "precision",       d.precision(),
+                    "recall",          d.recall(),
+                    "partialScore",    d.partialScore(),
+                    "label",           d.label(),
+                    "model",           d.model()
+                ));
             }
         }
 
         attempt.setAnswers(answers);
-        attempt.setScore(score);
+        attempt.setScore(totalScore);
         attempt.setMaxScore(questions.size());
+        attempt.setBertScoreDetails(bertDetailsJson);
         attempt.setAttemptStatus(AttemptStatus.SUBMITTED);
         attempt.setCompletedAt(now);
         attempt = attemptRepository.save(attempt);
 
-        log.info("Tentative {} soumise — score={}/{}", attemptId, score, questions.size());
-        return AttemptDto.from(attempt);
+        log.info("Tentative {} soumise — score={}/{} (QCM={}, openPartial={:.2f})",
+            attemptId, totalScore, questions.size(), qcmScore, openScore);
+
+        return AttemptDto.from(attempt, bertDetails);
     }
 
     @Override
@@ -98,7 +148,9 @@ public class AttemptServiceImpl implements AttemptService {
         if (!isStudent && !isTeacher)
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé");
 
-        return AttemptDto.from(attempt);
+        // Reconstruire les BertScoreDetailDto depuis le JSONB stocké
+        List<BertScoreDetailDto> bertDetails = extractBertDetails(attempt);
+        return AttemptDto.from(attempt, bertDetails);
     }
 
     @Override
@@ -107,5 +159,43 @@ public class AttemptServiceImpl implements AttemptService {
         User student = resolveUser(studentKeycloakId);
         Page<Attempt> page = attemptRepository.findByStudent_IdOrderByStartedAtDesc(student.getId(), pageable);
         return PageResponse.of(page.map(AttemptDto::from));
+    }
+
+    // ── helpers ───────────────────────────────────────────────────────────────
+
+    @SuppressWarnings("unchecked")
+    private List<BertScoreDetailDto> extractBertDetails(Attempt attempt) {
+        Map<String, Object> raw = attempt.getBertScoreDetails();
+        if (raw == null || raw.isEmpty()) return List.of();
+
+        List<BertScoreDetailDto> result = new ArrayList<>();
+        for (Map.Entry<String, Object> entry : raw.entrySet()) {
+            if (!(entry.getValue() instanceof Map<?, ?> m)) continue;
+            Map<String, Object> d = (Map<String, Object>) m;
+            result.add(new BertScoreDetailDto(
+                entry.getKey(),
+                str(d, "questionContent"),
+                str(d, "studentAnswer"),
+                str(d, "referenceAnswer"),
+                dbl(d, "f1"),
+                dbl(d, "precision"),
+                dbl(d, "recall"),
+                dbl(d, "partialScore"),
+                str(d, "label"),
+                str(d, "model")
+            ));
+        }
+        return result;
+    }
+
+    private static String str(Map<String, Object> m, String k) {
+        Object v = m.get(k);
+        return v != null ? v.toString() : "";
+    }
+
+    private static double dbl(Map<String, Object> m, String k) {
+        Object v = m.get(k);
+        if (v instanceof Number n) return n.doubleValue();
+        try { return Double.parseDouble(String.valueOf(v)); } catch (Exception e) { return 0.0; }
     }
 }
