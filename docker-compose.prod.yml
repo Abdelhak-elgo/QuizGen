@@ -1,0 +1,364 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────────────────────
+# QuizGen — Docker Compose PRODUCTION
+#
+# Usage :
+#   cp .env.example .env.prod
+#   # Remplir toutes les variables dans .env.prod (aucune valeur par défaut)
+#   docker compose -f docker-compose.prod.yml --env-file .env.prod up -d
+#
+# Toutes les valeurs sensibles proviennent de variables d'environnement.
+# Aucun mot de passe n'est codé en dur dans ce fichier.
+# ──────────────────────────────────────────────────────────────────────────────
+
+networks:
+  quizgen-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  keycloak-db-data:
+  redis-data:
+  minio-data:
+  ollama-data:
+  prometheus-data:
+  grafana-data:
+
+x-common-nlp: &common-nlp
+  image: ghcr.io/abdelhak-elgo/quizgen-nlp:${IMAGE_TAG:-latest}
+  environment:
+    REDIS_URL:        redis://:${REDIS_PASS}@redis:6379/0
+    MINIO_URL:        http://minio:9000
+    MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+    MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+    OLLAMA_URL:       http://ollama:11434
+    OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
+    BERT_SCORE_MODEL: ${BERT_SCORE_MODEL:-roberta-large}
+    PDF_CACHE_TTL_SECONDS: "3600"
+    PDF_CACHE_ENABLED: "true"
+  depends_on:
+    redis:
+      condition: service_healthy
+    minio:
+      condition: service_healthy
+  restart: always
+  logging:
+    driver: json-file
+    options:
+      max-size: "50m"
+      max-file: "5"
+  networks:
+    - quizgen-net
+
+services:
+
+  # ── PostgreSQL ───────────────────────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine
+    container_name: quizgen-postgres
+    environment:
+      POSTGRES_DB:       ${DB_NAME}
+      POSTGRES_USER:     ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASS}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ./init-db:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER} -d ${DB_NAME}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+
+  # ── PostgreSQL (Keycloak) ───────────────────────────────────────────────────
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: quizgen-keycloak-db
+    environment:
+      POSTGRES_DB:       keycloak
+      POSTGRES_USER:     keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASS}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+    networks:
+      - quizgen-net
+
+  # ── Keycloak 25.0 ────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: quizgen-keycloak
+    command: start --optimized --import-realm
+    environment:
+      KC_DB:              postgres
+      KC_DB_URL:          jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME:     keycloak
+      KC_DB_PASSWORD:     ${KC_DB_PASS}
+      KEYCLOAK_ADMIN:     admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASS}
+      KC_HOSTNAME:        ${KC_HOSTNAME}
+      KC_PROXY:           edge
+      KC_HTTP_ENABLED:    "true"
+      KC_HOSTNAME_STRICT: "false"
+      KC_LOG_LEVEL:       WARN
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "30m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: quizgen-redis
+    command:
+      - redis-server
+      - --requirepass
+      - ${REDIS_PASS}
+      - --save
+      - "300"
+      - "1"
+      - --loglevel
+      - warning
+      - --maxmemory
+      - ${REDIS_MAXMEMORY:-256mb}
+      - --maxmemory-policy
+      - allkeys-lru
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASS}", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+
+  # ── MinIO ───────────────────────────────────────────────────────────────────
+  minio:
+    image: minio/minio:latest
+    container_name: quizgen-minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER:     ${MINIO_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY}
+    volumes:
+      - minio-data:/data
+    healthcheck:
+      test: ["CMD", "mc", "ready", "local"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+
+  # ── MinIO Init ──────────────────────────────────────────────────────────────
+  minio-init:
+    image: minio/mc:latest
+    container_name: quizgen-minio-init
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY} ${MINIO_SECRET_KEY};
+        mc mb --ignore-existing local/documents;
+        mc mb --ignore-existing local/exports;
+        mc policy set download local/exports;
+        echo 'Buckets MinIO initialisés.';
+      "
+    networks:
+      - quizgen-net
+
+  # ── Ollama + Mistral ─────────────────────────────────────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: quizgen-ollama
+    volumes:
+      - ollama-data:/root/.ollama
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:11434/api/tags || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "30m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+    # Décommenter pour GPU NVIDIA :
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+
+  # ── Spring Boot API ───────────────────────────────────────────────────────────
+  backend:
+    image: ghcr.io/abdelhak-elgo/quizgen-backend:${IMAGE_TAG:-latest}
+    container_name: quizgen-backend
+    environment:
+      DB_HOST:             postgres
+      DB_PORT:             "5432"
+      DB_NAME:             ${DB_NAME}
+      DB_USER:             ${DB_USER}
+      DB_PASS:             ${DB_PASS}
+      KEYCLOAK_URL:        http://keycloak:8080
+      KEYCLOAK_REALM:      quizgen
+      MINIO_URL:           http://minio:9000
+      MINIO_ACCESS_KEY:    ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY:    ${MINIO_SECRET_KEY}
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_EXPORTS:   exports
+      NLP_SERVICE_URL:     http://nlp-service:8000
+      MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "prometheus,health,info"
+      MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"
+      JAVA_OPTS: "-Xms512m -Xmx1024m -XX:+UseG1GC"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      keycloak:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8080/api/v1/actuator/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "50m"
+        max-file: "5"
+    networks:
+      - quizgen-net
+
+  # ── FastAPI NLP ───────────────────────────────────────────────────────────────
+  nlp-service:
+    <<: *common-nlp
+    container_name: quizgen-nlp
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://localhost:8000/health || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+
+  # ── Celery Worker ─────────────────────────────────────────────────────────────
+  nlp-worker:
+    <<: *common-nlp
+    container_name: quizgen-nlp-worker
+    command: celery -A app.celery_app worker --loglevel=warning --concurrency=2 -Q celery
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+
+  # ── Prometheus ───────────────────────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:v2.53.0
+    container_name: quizgen-prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --storage.tsdb.retention.time=30d
+      - --web.enable-lifecycle
+    volumes:
+      - ./monitoring/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    restart: always
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - quizgen-net
+
+  # ── Grafana ──────────────────────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:11.1.0
+    container_name: quizgen-grafana
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASS:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_SERVER_ROOT_URL: http://${GRAFANA_HOST:-localhost}:3000
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    depends_on:
+      - prometheus
+    restart: always
+    ports:
+      - "3000:3000"   # Accessible uniquement depuis le bastion / VPN
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - quizgen-net

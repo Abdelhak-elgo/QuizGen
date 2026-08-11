@@ -56,6 +56,31 @@ nlp:
     connect-timeout-ms: 5000
     read-timeout-ms: 120000
 
+# ── Actuator & Prometheus ─────────────────────────────────────────────────────
+management:
+  endpoints:
+    web:
+      exposure:
+        include: prometheus,health,info,metrics
+      base-path: /actuator
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: when-authorized
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  metrics:
+    tags:
+      application: quizgen-backend
+    distribution:
+      percentiles-histogram:
+        http.server.requests: true
+      percentiles:
+        http.server.requests: 0.5,0.75,0.95,0.99
+
 logging:
   level:
     ma.quizgen: INFO

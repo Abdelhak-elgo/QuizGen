@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse
 from app.bert_scorer import BertScorer
 from app.celery_app import celery_app
 from app.config import get_settings
+from app.metrics import record_bertscore, setup_prometheus
 from app.llm_client import ping_ollama
 from app.models import (
     BatchScoreRequest,
@@ -41,6 +42,9 @@ app = FastAPI(
     ),
     version="3.0.0",
 )
+
+# Activer les métriques Prometheus (endpoint /metrics)
+setup_prometheus(app)
 
 
 # ── Health ────────────────────────────────────────────────────────────────────
@@ -230,7 +234,9 @@ async def score_answer(request: ScoreRequest) -> ScoreResponse:
     - **model** : Modèle utilisé (roberta-large par défaut)
     """
     try:
-        return _build_score_response(request)
+        resp = _build_score_response(request)
+        record_bertscore(resp.f1, resp.label)
+        return resp
     except Exception as exc:
         logger.error("Erreur /score : %s", exc, exc_info=True)
         raise HTTPException(
@@ -259,7 +265,9 @@ async def score_batch(request: BatchScoreRequest) -> BatchScoreResponse:
     results = []
     for item in request.items:
         try:
-            results.append(_build_score_response(item))
+            resp = _build_score_response(item)
+            record_bertscore(resp.f1, resp.label)
+            results.append(resp)
         except Exception as exc:
             logger.error("Erreur item %s : %s", item.question_id, exc)
             results.append(ScoreResponse(

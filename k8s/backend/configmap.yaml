@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: backend-config
+  namespace: quizgen
+  labels:
+    app: backend
+    app.kubernetes.io/part-of: quizgen-platform
+data:
+  DB_HOST: "postgres"
+  DB_PORT: "5432"
+  DB_NAME: "quizgen"
+  DB_USER: "quizgen"
+  KEYCLOAK_URL: "http://keycloak:8080"
+  KEYCLOAK_REALM: "quizgen"
+  MINIO_URL: "http://minio:9000"
+  MINIO_BUCKET_DOCUMENTS: "documents"
+  MINIO_BUCKET_EXPORTS: "exports"
+  NLP_SERVICE_URL: "http://nlp-service:8000"
+  NLP_POLL_INTERVAL_MS: "3000"
+  NLP_TIMEOUT_MS: "300000"
+  # Actuator / Prometheus
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "prometheus,health,info,metrics"
+  MANAGEMENT_PROMETHEUS_METRICS_EXPORT_ENABLED: "true"

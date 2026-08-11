@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: quizgen
+  labels:
+    app.kubernetes.io/name: quizgen
+    app.kubernetes.io/part-of: quizgen-platform

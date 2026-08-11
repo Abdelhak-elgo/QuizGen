@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init-scripts
+  namespace: quizgen
+  labels:
+    app: postgres
+    app.kubernetes.io/part-of: quizgen-platform
+data:
+  # Les scripts SQL d'initialisation sont montés depuis ce ConfigMap.
+  # En production, utiliser un Job Kubernetes d'initialisation ou Flyway.
+  # Ici on référence le contenu de init-db/01-schema.sql via kustomize.
+  note.txt: |
+    Les scripts SQL (01-schema.sql, 02-phase5-migration.sql) doivent être
+    ajoutés via kustomize configMapGenerator ou un Job d'init séparé.
+    Voir k8s/jobs/db-migrate.yaml.

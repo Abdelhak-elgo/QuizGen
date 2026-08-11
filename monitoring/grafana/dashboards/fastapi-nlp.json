@@ -1,0 +1,121 @@
+{
+  "__inputs": [],
+  "__requires": [
+    { "type": "grafana", "id": "grafana", "name": "Grafana", "version": "11.0.0" },
+    { "type": "datasource", "id": "prometheus", "name": "Prometheus", "version": "1.0.0" }
+  ],
+  "annotations": { "list": [] },
+  "description": "QuizGen FastAPI NLP — requêtes, BERTScore, génération Ollama, cache Redis",
+  "editable": true,
+  "graphTooltip": 1,
+  "panels": [
+    {
+      "id": 1,
+      "title": "HTTP Requests / sec",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "targets": [
+        {
+          "expr": "rate(quizgen_nlp_http_requests_total{job=\"quizgen-nlp\"}[1m])",
+          "legendFormat": "{{method}} {{endpoint}} {{http_status}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps" } }
+    },
+    {
+      "id": 2,
+      "title": "HTTP P95 Latency",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(quizgen_nlp_http_request_duration_seconds_bucket{job=\"quizgen-nlp\"}[5m]))",
+          "legendFormat": "p95 {{endpoint}}"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 3,
+      "title": "BERTScore F1 moyen (fenêtre 5 min)",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 0, "y": 8 },
+      "targets": [
+        {
+          "expr": "rate(quizgen_nlp_bertscore_f1_sum{job=\"quizgen-nlp\"}[5m]) / rate(quizgen_nlp_bertscore_f1_count{job=\"quizgen-nlp\"}[5m])",
+          "legendFormat": "F1 moyen"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.50 },
+              { "color": "green", "value": 0.70 }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "id": 4,
+      "title": "Distribution labels BERTScore",
+      "type": "piechart",
+      "gridPos": { "h": 8, "w": 8, "x": 6, "y": 8 },
+      "targets": [
+        {
+          "expr": "sum by (label) (increase(quizgen_nlp_bertscore_labels_total{job=\"quizgen-nlp\"}[1h]))",
+          "legendFormat": "{{label}}"
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Ollama génération — temps moyen",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 8, "x": 0, "y": 12 },
+      "targets": [
+        {
+          "expr": "rate(quizgen_nlp_ollama_generation_seconds_sum{job=\"quizgen-nlp\"}[5m]) / rate(quizgen_nlp_ollama_generation_seconds_count{job=\"quizgen-nlp\"}[5m])",
+          "legendFormat": "Durée moyenne génération"
+        }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s" } }
+    },
+    {
+      "id": 6,
+      "title": "Cache Redis PDF — hit rate",
+      "type": "stat",
+      "gridPos": { "h": 4, "w": 6, "x": 8, "y": 12 },
+      "targets": [
+        {
+          "expr": "rate(quizgen_nlp_pdf_cache_hits_total{job=\"quizgen-nlp\"}[5m]) / (rate(quizgen_nlp_pdf_cache_hits_total{job=\"quizgen-nlp\"}[5m]) + rate(quizgen_nlp_pdf_cache_misses_total{job=\"quizgen-nlp\"}[5m]))",
+          "legendFormat": "Hit rate"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "thresholds": {
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.50 },
+              { "color": "green", "value": 0.80 }
+            ]
+          }
+        }
+      }
+    }
+  ],
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "tags": ["quizgen", "fastapi", "nlp", "bertscore"],
+  "time": { "from": "now-1h", "to": "now" },
+  "title": "QuizGen — FastAPI NLP",
+  "uid": "quizgen-fastapi-nlp",
+  "version": 1
+}
