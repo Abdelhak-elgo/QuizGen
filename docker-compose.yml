@@ -197,8 +197,34 @@ services:
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
       OLLAMA_URL:       http://ollama:11434
+      OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
     ports:
       - "8000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - quizgen-net
+    restart: unless-stopped
+
+  # ── Celery Worker (génération asynchrone de quiz) ─────────────────────────────
+  nlp-worker:
+    build:
+      context: ./nlp-service
+      dockerfile: Dockerfile
+    container_name: quizgen-nlp-worker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q celery
+    environment:
+      REDIS_URL:        redis://:${REDIS_PASS:-redis_secret_2025}@redis:6379/0
+      MINIO_URL:        http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
+      OLLAMA_URL:       http://ollama:11434
+      OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
     depends_on:
       redis:
         condition: service_healthy
