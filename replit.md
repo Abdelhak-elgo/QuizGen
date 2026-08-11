@@ -1,6 +1,6 @@
-# [Project name]
+# QuizGen
 
-_Replace the heading above with the project's name, and this line with one sentence describing what this app does for users._
+Plateforme de génération automatique de quiz pédagogiques à partir de documents PDF, utilisant l'IA (Mistral via Ollama) et le NLP (SpaCy, KeyBERT, BERTScore) — PFE Master MIAGE 2024/2025.
 
 ## Run & Operate
 
