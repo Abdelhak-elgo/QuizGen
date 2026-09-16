@@ -1,75 +1,125 @@
-# ============================================================
-# QuizGen — Docker Compose (Développement)
-# PFE Master MIAGE 2024/2025
-# Usage : docker-compose up -d
-# ============================================================
-
 version: "3.9"
 
+networks:
+  quizgen-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  keycloak-db-data:
+  redis-data:
+  minio-data:
+  ollama-data:
+  chroma-data:        # Volume partagé ChromaDB — nlp-service + nlp-worker (RAG store)
+
+# ──────────────────────────────────────────────────────────────────────────────
 services:
-  # ===================== PostgreSQL =====================
+
+  # ── PostgreSQL (app) ────────────────────────────────────────────────────────
   postgres:
     image: postgres:16-alpine
     container_name: quizgen-postgres
-    restart: unless-stopped
     environment:
-      POSTGRES_DB: ${POSTGRES_DB}
-      POSTGRES_USER: ${POSTGRES_USER}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
-    ports:
-      - "${POSTGRES_PORT}:5432"
+      POSTGRES_DB:       ${DB_NAME:-quizgen}
+      POSTGRES_USER:     ${DB_USER:-quizgen}
+      POSTGRES_PASSWORD: ${DB_PASS:-quizgen_secret_2025}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
       - ./init-db:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      test: ["CMD-SHELL", "pg_isready -U ${DB_USER:-quizgen} -d ${DB_NAME:-quizgen}"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - quizgen-network
+      - quizgen-net
 
-  # ===================== Redis =========================
+  # ── PostgreSQL (Keycloak — base séparée) ────────────────────────────────────
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: quizgen-keycloak-db
+    environment:
+      POSTGRES_DB:       keycloak
+      POSTGRES_USER:     keycloak
+      POSTGRES_PASSWORD: ${KC_DB_PASS:-keycloak_secret_2025}
+    volumes:
+      - keycloak-db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak -d keycloak"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - quizgen-net
+
+  # ── Keycloak 25.0 ────────────────────────────────────────────────────────────
+  keycloak:
+    image: quay.io/keycloak/keycloak:25.0
+    container_name: quizgen-keycloak
+    command: start-dev --import-realm
+    environment:
+      KC_DB:              postgres
+      KC_DB_URL:          jdbc:postgresql://keycloak-db:5432/keycloak
+      KC_DB_USERNAME:     keycloak
+      KC_DB_PASSWORD:     ${KC_DB_PASS:-keycloak_secret_2025}
+      KEYCLOAK_ADMIN:     admin
+      KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASS:-admin}
+    volumes:
+      - ./keycloak:/opt/keycloak/data/import:ro
+    ports:
+      - "8180:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 10
+    networks:
+      - quizgen-net
+
+  # ── Redis 7 ─────────────────────────────────────────────────────────────────
   redis:
     image: redis:7-alpine
     container_name: quizgen-redis
-    restart: unless-stopped
-    command: redis-server --requirepass ${REDIS_PASSWORD} --appendonly yes
-    ports:
-      - "${REDIS_PORT}:6379"
+    command: redis-server --requirepass ${REDIS_PASS:-redis_secret_2025}
     volumes:
-      - redis_data:/data
+      - redis-data:/data
+    ports:
+      - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "-a", "${REDIS_PASSWORD}", "ping"]
+      test: ["CMD", "redis-cli", "-a", "${REDIS_PASS:-redis_secret_2025}", "ping"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - quizgen-network
+      - quizgen-net
 
-  # ===================== MinIO (S3) ====================
+  # ── MinIO ───────────────────────────────────────────────────────────────────
   minio:
     image: minio/minio:latest
     container_name: quizgen-minio
-    restart: unless-stopped
     command: server /data --console-address ":9001"
     environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    ports:
-      - "${MINIO_PORT}:9000"
-      - "${MINIO_CONSOLE_PORT}:9001"
+      MINIO_ROOT_USER:     ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_ROOT_PASSWORD: ${MINIO_SECRET_KEY:-minio_secret_2025}
     volumes:
-      - minio_data:/data
+      - minio-data:/data
+    ports:
+      - "9000:9000"   # API S3
+      - "9001:9001"   # Console Web
     healthcheck:
       test: ["CMD", "mc", "ready", "local"]
       interval: 10s
       timeout: 5s
       retries: 5
     networks:
-      - quizgen-network
+      - quizgen-net
 
-  # ---- Création automatique des buckets MinIO ----
+  # ── MinIO Init (crée les buckets au démarrage) ───────────────────────────────
   minio-init:
     image: minio/mc:latest
     container_name: quizgen-minio-init
@@ -78,147 +128,85 @@ services:
         condition: service_healthy
     entrypoint: >
       /bin/sh -c "
-        mc alias set quizgen http://minio:9000 ${MINIO_ROOT_USER} ${MINIO_ROOT_PASSWORD};
-        mc mb --ignore-existing quizgen/${MINIO_BUCKET_DOCUMENTS};
-        mc mb --ignore-existing quizgen/${MINIO_BUCKET_EXPORTS};
-        mc anonymous set download quizgen/${MINIO_BUCKET_EXPORTS};
-        echo '=== Buckets MinIO créés avec succès ===';
-        exit 0;
+        mc alias set local http://minio:9000 ${MINIO_ACCESS_KEY:-minioadmin} ${MINIO_SECRET_KEY:-minio_secret_2025};
+        mc mb --ignore-existing local/documents;
+        mc mb --ignore-existing local/exports;
+        echo 'Buckets MinIO créés.';
       "
     networks:
-      - quizgen-network
+      - quizgen-net
 
-  # ===================== Ollama (Mistral LLM) ==========
+  # ── Ollama + Mistral ─────────────────────────────────────────────────────────
   ollama:
     image: ollama/ollama:latest
     container_name: quizgen-ollama
-    restart: unless-stopped
-    ports:
-      - "${OLLAMA_PORT}:11434"
     volumes:
-      - ollama_data:/root/.ollama
+      - ollama-data:/root/.ollama
+    ports:
+      - "11434:11434"
     healthcheck:
       test: ["CMD-SHELL", "curl -f http://localhost:11434/api/tags || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
-    networks:
-      - quizgen-network
-    # Décommenter pour GPU NVIDIA :
-    # deploy:
-    #   resources:
-    #     reservations:
-    #       devices:
-    #         - driver: nvidia
-    #           count: 1
-    #           capabilities: [gpu]
-
-  # ===================== Keycloak =======================
-  keycloak:
-    container_name: quizgen-keycloak
-    image: quay.io/keycloak/keycloak:26.4.1
-    command:
-      - "start-dev"
-      - "--import-realm"
-      - "--log-level=DEBUG"
-      - "--http-port=8080"
-      - "--hostname-strict=false"
-      - "--hostname-strict-https=false"
-      - "--health-enabled=true"
-    environment:
-      KC_HOSTNAME: localhost
-      KC_HOSTNAME_PORT: 8080
-      KC_HTTP_ENABLED: "true"
-      KEYCLOAK_ADMIN: ${KEYCLOAK_ADMIN}
-      KEYCLOAK_ADMIN_PASSWORD: ${KEYCLOAK_ADMIN_PASSWORD}
-      KC_DB: postgres
-      KC_DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB_KEYCLOAK}
-      KC_DB_USERNAME: ${POSTGRES_USER}
-      KC_DB_PASSWORD: ${POSTGRES_PASSWORD}
-      # Import realm from volume
-      KC_IMPORT_REALM: /opt/keycloak/data/import/realm-export.json
-    ports:
-      - "8090:8080" # Changed to avoid conflict with Spring API
-    volumes:
-      - ./keycloak/realm-export.json:/opt/keycloak/data/import/realm-export.json:ro
-      - keycloak_data:/opt/keycloak/data
-    restart: unless-stopped
-    depends_on:
-      postgres:
-        condition: service_healthy
-    networks:
-      - quizgen-network
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+    networks:
+      - quizgen-net
 
-    # ===================== Spring Boot API ===============
-  spring-api:
+  # ── Spring Boot API ───────────────────────────────────────────────────────────
+  backend:
     build:
       context: ./backend
       dockerfile: Dockerfile
-      args:
-        - MAVEN_OPTS=-Xmx1024m
-    container_name: quizgen-spring-api
-    restart: unless-stopped
+    container_name: quizgen-backend
     environment:
-      # ... (keep existing environment variables)
+      DB_HOST:             postgres
+      DB_PORT:             5432
+      DB_NAME:             ${DB_NAME:-quizgen}
+      DB_USER:             ${DB_USER:-quizgen}
+      DB_PASS:             ${DB_PASS:-quizgen_secret_2025}
+      KEYCLOAK_URL:        http://keycloak:8080
+      KEYCLOAK_REALM:      quizgen
+      MINIO_URL:           http://minio:9000
+      MINIO_ACCESS_KEY:    ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY:    ${MINIO_SECRET_KEY:-minio_secret_2025}
+      MINIO_BUCKET_DOCUMENTS: documents
+      MINIO_BUCKET_EXPORTS:   exports
     ports:
-      - "${SPRING_PORT}:8080"
+      - "8080:8080"
     depends_on:
       postgres:
         condition: service_healthy
-      redis:
+      keycloak:
         condition: service_healthy
       minio:
         condition: service_healthy
-      keycloak:
+      redis:
         condition: service_healthy
-    healthcheck:
-      test:
-        [
-          "CMD-SHELL",
-          "wget --no-verbose --tries=1 --spider http://localhost:8080/actuator/health || exit 1",
-        ]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 60s
     networks:
-      - quizgen-network
-    # Add build resources
-    deploy:
-      resources:
-        limits:
-          memory: 2G
-        reservations:
-          memory: 1G
+      - quizgen-net
+    restart: unless-stopped
 
-  # ===================== FastAPI NLP ===================
-  fastapi-nlp:
+  # ── FastAPI NLP ───────────────────────────────────────────────────────────────
+  nlp-service:
     build:
       context: ./nlp-service
       dockerfile: Dockerfile
-    container_name: quizgen-fastapi-nlp
-    restart: unless-stopped
+    container_name: quizgen-nlp
     environment:
-      # MinIO
-      MINIO_ENDPOINT: minio:9000
-      MINIO_ACCESS_KEY: ${MINIO_ROOT_USER}
-      MINIO_SECRET_KEY: ${MINIO_ROOT_PASSWORD}
-      MINIO_BUCKET_DOCUMENTS: ${MINIO_BUCKET_DOCUMENTS}
-      # Redis (Celery broker)
-      CELERY_BROKER_URL: redis://:${REDIS_PASSWORD}@redis:6379/0
-      CELERY_RESULT_BACKEND: redis://:${REDIS_PASSWORD}@redis:6379/1
-      # Ollama
-      OLLAMA_BASE_URL: http://ollama:11434
-      OLLAMA_MODEL: ${OLLAMA_MODEL}
+      REDIS_URL:        redis://:${REDIS_PASS:-redis_secret_2025}@redis:6379/0
+      MINIO_URL:        http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
+      OLLAMA_URL:       http://ollama:11434
+      OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
+      # ChromaDB RAG store — volume partagé avec nlp-worker
+      CHROMADB_PATH:    /data/chroma
+      RAG_ENABLED:      "true"
+      RAG_TOP_K:        "3"
     ports:
-      - "${FASTAPI_PORT}:8000"
+      - "8000:8000"
+    volumes:
+      - chroma-data:/data/chroma   # Volume partagé avec nlp-worker (même index vectoriel)
     depends_on:
       redis:
         condition: service_healthy
@@ -226,30 +214,37 @@ services:
         condition: service_healthy
       ollama:
         condition: service_healthy
-    healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
     networks:
-      - quizgen-network
+      - quizgen-net
+    restart: unless-stopped
 
-# ===================== Volumes =========================
-volumes:
-  postgres_data:
-    driver: local
-  redis_data:
-    driver: local
-  minio_data:
-    driver: local
-  ollama_data:
-    driver: local
-  keycloak_data:
-    driver: local
-
-# ===================== Network =========================
-networks:
-  quizgen-network:
-    driver: bridge
-    name: quizgen-network
+  # ── Celery Worker (génération asynchrone de quiz) ─────────────────────────────
+  nlp-worker:
+    build:
+      context: ./nlp-service
+      dockerfile: Dockerfile
+    container_name: quizgen-nlp-worker
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q celery
+    environment:
+      REDIS_URL:        redis://:${REDIS_PASS:-redis_secret_2025}@redis:6379/0
+      MINIO_URL:        http://minio:9000
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
+      OLLAMA_URL:       http://ollama:11434
+      OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
+      # ChromaDB RAG store — même chemin que nlp-service (volume partagé)
+      CHROMADB_PATH:    /data/chroma
+      RAG_ENABLED:      "true"
+      RAG_TOP_K:        "3"
+    volumes:
+      - chroma-data:/data/chroma   # Partagé avec nlp-service — un seul index par document
+    depends_on:
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+      ollama:
+        condition: service_healthy
+    networks:
+      - quizgen-net
+    restart: unless-stopped

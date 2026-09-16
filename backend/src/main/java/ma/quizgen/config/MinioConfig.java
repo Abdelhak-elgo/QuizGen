@@ -8,8 +8,8 @@ import org.springframework.context.annotation.Configuration;
 @Configuration
 public class MinioConfig {
 
-    @Value("${minio.endpoint}")
-    private String endpoint;
+    @Value("${minio.url}")
+    private String url;
 
     @Value("${minio.access-key}")
     private String accessKey;
@@ -20,8 +20,8 @@ public class MinioConfig {
     @Bean
     public MinioClient minioClient() {
         return MinioClient.builder()
-                .endpoint(endpoint)
-                .credentials(accessKey, secretKey)
-                .build();
+            .endpoint(url)
+            .credentials(accessKey, secretKey)
+            .build();
     }
 }
