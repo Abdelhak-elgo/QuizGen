@@ -1,0 +1,13 @@
+.git
+.github
+.agents
+.local
+attached_assets
+**/node_modules
+**/dist
+**/target
+**/.pytest_cache
+**/__pycache__
+**/*.pyc
+**/coverage.xml
+e2e

@@ -45,13 +45,13 @@ cp .env.example .env
 ### 2. Lancer tous les services
 
 ```bash
-docker-compose up -d
+docker compose up -d --build
 ```
 
 Vérifier que tout est sain :
 
 ```bash
-docker-compose ps
+docker compose ps
 # Tous les services doivent afficher "healthy" ou "running"
 ```
 
@@ -66,6 +66,7 @@ chmod +x scripts/setup-ollama.sh
 
 | Service | URL | Credentials |
 |---------|-----|-------------|
+| Frontend QuizGen | http://localhost:3000 | Comptes de test ci-dessous |
 | Spring Boot API | http://localhost:8080/api/v1 | JWT Keycloak |
 | Swagger UI | http://localhost:8080/api/v1/swagger-ui.html | — |
 | Keycloak Console | http://localhost:8180 | admin / (KC_ADMIN_PASS dans .env) |
@@ -84,6 +85,11 @@ chmod +x scripts/setup-ollama.sh
 | admin@quizgen.ma | admin123 | ADMIN |
 | prof.ahmed@univ.ma | prof123 | ENSEIGNANT |
 | sara.elamrani@univ.ma | etud123 | ETUDIANT |
+
+Après connexion avec le compte administrateur, l'interface d'administration
+est disponible sur `http://localhost:3000/admin`. Elle permet actuellement de
+consulter et paginer l'annuaire des utilisateurs. La modification des rôles,
+l'activation et la suppression nécessitent encore des endpoints backend.
 
 ### Obtenir un token JWT (curl)
 
@@ -257,7 +263,7 @@ QuizGen/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   └── app/main.py
-└── frontend/                   # React 18 — Phase 4
+└── artifacts/frontend/         # React + Vite — application web multi-rôles
 ```
 
 ---
@@ -268,8 +274,8 @@ QuizGen/
 |-------|---------|--------|
 | Phase 1 | Spring Boot CRUD Users + Documents + MinIO | ✅ Fait |
 | Phase 2 | CI/CD + Postman | ✅ Fait |
-| Phase 3 | FastAPI NLP : SpaCy + KeyBERT + Mistral | ⏳ À faire |
-| Phase 4 | Spring Boot Quiz, Sessions, Attempts, Analytics | ⏳ À faire |
-| Phase 5 | React 18 Frontend multi-rôles | ⏳ À faire |
-| Phase 6 | BERTScore + Exports SCORM/Moodle | ⏳ À faire |
+| Phase 3 | FastAPI NLP : SpaCy + KeyBERT + Mistral | ✅ Fait |
+| Phase 4 | Spring Boot Quiz, Sessions, Attempts, Analytics | ✅ Fait |
+| Phase 5 | React Frontend multi-rôles | ✅ Fait |
+| Phase 6 | BERTScore + Exports SCORM/Moodle | ✅ Fait |
 | Phase 7 | Qualité + Kubernetes + Monitoring | ⏳ À faire |

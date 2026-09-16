@@ -64,6 +64,7 @@ services:
       KC_DB_PASSWORD:     ${KC_DB_PASS:-keycloak_secret_2025}
       KEYCLOAK_ADMIN:     admin
       KEYCLOAK_ADMIN_PASSWORD: ${KC_ADMIN_PASS:-admin}
+      KC_HEALTH_ENABLED:  "true"
     volumes:
       - ./keycloak:/opt/keycloak/data/import:ro
     ports:
@@ -72,7 +73,7 @@ services:
       keycloak-db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "curl -f http://localhost:8080/health/ready || exit 1"]
+      test: ["CMD-SHELL", "bash -c 'exec 3<>/dev/tcp/127.0.0.1/9000; printf \"GET /health/ready HTTP/1.1\\r\\nHost: localhost\\r\\nConnection: close\\r\\n\\r\\n\" >&3; grep -q \"200 OK\" <&3'"]
       interval: 30s
       timeout: 10s
       retries: 10
@@ -179,6 +180,29 @@ services:
       minio:
         condition: service_healthy
       redis:
+        condition: service_healthy
+    networks:
+      - quizgen-net
+    restart: unless-stopped
+
+  # ── React Frontend ───────────────────────────────────────────────────────────
+  frontend:
+    build:
+      context: .
+      dockerfile: artifacts/frontend/Dockerfile
+      args:
+        BASE_PATH: /
+        PORT: "4173"
+        VITE_KEYCLOAK_URL: ${VITE_KEYCLOAK_URL:-http://localhost:8180}
+        VITE_KEYCLOAK_REALM: ${VITE_KEYCLOAK_REALM:-quizgen}
+        VITE_KEYCLOAK_CLIENT_ID: ${VITE_KEYCLOAK_CLIENT_ID:-quizgen-frontend}
+    container_name: quizgen-frontend
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+      keycloak:
         condition: service_healthy
     networks:
       - quizgen-net
