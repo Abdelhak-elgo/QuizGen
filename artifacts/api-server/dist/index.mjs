@@ -160,7 +160,7 @@ var require_common = __commonJS({
     function setup(env) {
       createDebug.debug = createDebug;
       createDebug.default = createDebug;
-      createDebug.coerce = coerce;
+      createDebug.coerce = coerce2;
       createDebug.disable = disable;
       createDebug.enable = enable;
       createDebug.enabled = enabled;
@@ -315,7 +315,7 @@ var require_common = __commonJS({
         }
         return false;
       }
-      function coerce(val) {
+      function coerce2(val) {
         if (val instanceof Error) {
           return val.stack || val.message;
         }
@@ -15840,9 +15840,9 @@ var require_object_inspect = __commonJS({
       }
       var sepRegex = /[0-9](?=(?:[0-9]{3})+(?![0-9]))/g;
       if (typeof num === "number") {
-        var int = num < 0 ? -$floor(-num) : $floor(num);
-        if (int !== num) {
-          var intStr = String(int);
+        var int2 = num < 0 ? -$floor(-num) : $floor(num);
+        if (int2 !== num) {
+          var intStr = String(int2);
           var dec = $slice.call(str, intStr.length + 1);
           return $replace.call(intStr, sepRegex, "$&_") + "." + $replace.call($replace.call(dec, /([0-9]{3})/g, "$&_"), /_$/, "");
         }
@@ -32470,6 +32470,33 @@ ZodReadonly.create = (type, params) => {
     ...processCreateParams(params)
   });
 };
+function cleanParams(params, data) {
+  const p = typeof params === "function" ? params(data) : typeof params === "string" ? { message: params } : params;
+  const p2 = typeof p === "string" ? { message: p } : p;
+  return p2;
+}
+function custom(check, _params = {}, fatal) {
+  if (check)
+    return ZodAny.create().superRefine((data, ctx) => {
+      const r = check(data);
+      if (r instanceof Promise) {
+        return r.then((r2) => {
+          if (!r2) {
+            const params = cleanParams(_params, data);
+            const _fatal = params.fatal ?? fatal ?? true;
+            ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+          }
+        });
+      }
+      if (!r) {
+        const params = cleanParams(_params, data);
+        const _fatal = params.fatal ?? fatal ?? true;
+        ctx.addIssue({ code: "custom", ...params, fatal: _fatal });
+      }
+      return;
+    });
+  return ZodAny.create();
+}
 var late = {
   object: ZodObject.lazycreate
 };
@@ -32512,6 +32539,9 @@ var ZodFirstPartyTypeKind;
   ZodFirstPartyTypeKind2["ZodPipeline"] = "ZodPipeline";
   ZodFirstPartyTypeKind2["ZodReadonly"] = "ZodReadonly";
 })(ZodFirstPartyTypeKind || (ZodFirstPartyTypeKind = {}));
+var instanceOfType = (cls, params = {
+  message: `Input not instance of ${cls.name}`
+}) => custom((data) => data instanceof cls, params);
 var stringType = ZodString.create;
 var numberType = ZodNumber.create;
 var nanType = ZodNaN.create;
@@ -32546,10 +32576,446 @@ var optionalType = ZodOptional.create;
 var nullableType = ZodNullable.create;
 var preprocessType = ZodEffects.createWithPreprocess;
 var pipelineType = ZodPipeline.create;
+var coerce = {
+  string: ((arg) => ZodString.create({ ...arg, coerce: true })),
+  number: ((arg) => ZodNumber.create({ ...arg, coerce: true })),
+  boolean: ((arg) => ZodBoolean.create({
+    ...arg,
+    coerce: true
+  })),
+  bigint: ((arg) => ZodBigInt.create({ ...arg, coerce: true })),
+  date: ((arg) => ZodDate.create({ ...arg, coerce: true }))
+};
 
 // ../../lib/api-zod/src/generated/api.ts
 var HealthCheckResponse = objectType({
-  status: stringType()
+  "status": stringType()
+});
+var SyncUserResponse = objectType({
+  "id": (void 0)(),
+  "keycloakId": stringType().optional(),
+  "email": stringType(),
+  "firstName": stringType().nullish(),
+  "lastName": stringType().nullish(),
+  "role": enumType(["ENSEIGNANT", "ETUDIANT", "ADMIN"]),
+  "isActive": booleanType(),
+  "createdAt": coerce.date().optional()
+});
+var GetMeResponse = objectType({
+  "id": (void 0)(),
+  "keycloakId": stringType().optional(),
+  "email": stringType(),
+  "firstName": stringType().nullish(),
+  "lastName": stringType().nullish(),
+  "role": enumType(["ENSEIGNANT", "ETUDIANT", "ADMIN"]),
+  "isActive": booleanType(),
+  "createdAt": coerce.date().optional()
+});
+var listUsersQueryPageDefault = 0;
+var listUsersQuerySizeDefault = 20;
+var ListUsersQueryParams = objectType({
+  "page": coerce.number().int().default(listUsersQueryPageDefault),
+  "size": coerce.number().int().default(listUsersQuerySizeDefault)
+});
+var ListUsersResponse = objectType({
+  "content": arrayType(objectType({
+    "id": (void 0)(),
+    "keycloakId": stringType().optional(),
+    "email": stringType(),
+    "firstName": stringType().nullish(),
+    "lastName": stringType().nullish(),
+    "role": enumType(["ENSEIGNANT", "ETUDIANT", "ADMIN"]),
+    "isActive": booleanType(),
+    "createdAt": coerce.date().optional()
+  })),
+  "page": (void 0)(),
+  "size": (void 0)(),
+  "totalElements": (void 0)(),
+  "totalPages": (void 0)(),
+  "last": booleanType()
+});
+var listDocumentsQueryPageDefault = 0;
+var listDocumentsQuerySizeDefault = 10;
+var ListDocumentsQueryParams = objectType({
+  "page": coerce.number().int().default(listDocumentsQueryPageDefault),
+  "size": coerce.number().int().default(listDocumentsQuerySizeDefault)
+});
+var ListDocumentsResponse = objectType({
+  "content": arrayType(objectType({
+    "id": (void 0)(),
+    "originalFilename": stringType(),
+    "bucketName": stringType(),
+    "objectKey": stringType(),
+    "fileSize": (void 0)().nullish(),
+    "pageCount": (void 0)().nullish(),
+    "isProcessed": booleanType(),
+    "createdAt": coerce.date().optional()
+  })),
+  "page": (void 0)(),
+  "size": (void 0)(),
+  "totalElements": (void 0)(),
+  "totalPages": (void 0)(),
+  "last": booleanType()
+});
+var UploadDocumentBody = objectType({
+  "file": instanceOfType(File)
+});
+var UploadDocumentResponse = objectType({
+  "id": (void 0)(),
+  "originalFilename": stringType(),
+  "objectKey": stringType(),
+  "message": stringType()
+});
+var GetDocumentParams = objectType({
+  "id": (void 0)()
+});
+var GetDocumentResponse = objectType({
+  "id": (void 0)(),
+  "originalFilename": stringType(),
+  "bucketName": stringType(),
+  "objectKey": stringType(),
+  "fileSize": (void 0)().nullish(),
+  "pageCount": (void 0)().nullish(),
+  "isProcessed": booleanType(),
+  "createdAt": coerce.date().optional()
+});
+var DeleteDocumentParams = objectType({
+  "id": (void 0)()
+});
+var DeleteDocumentResponse = voidType();
+var GetDocumentDownloadUrlParams = objectType({
+  "id": (void 0)()
+});
+var GetDocumentDownloadUrlResponse = objectType({
+  "url": stringType()
+});
+var listQuizzesQueryPageDefault = 0;
+var listQuizzesQuerySizeDefault = 10;
+var ListQuizzesQueryParams = objectType({
+  "page": coerce.number().int().default(listQuizzesQueryPageDefault),
+  "size": coerce.number().int().default(listQuizzesQuerySizeDefault)
+});
+var ListQuizzesResponse = objectType({
+  "content": arrayType(objectType({
+    "id": (void 0)(),
+    "documentId": (void 0)().optional(),
+    "documentName": stringType().optional(),
+    "teacherId": (void 0)().optional(),
+    "teacherName": stringType().optional(),
+    "title": stringType(),
+    "description": stringType().nullish(),
+    "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+    "nbQuestions": (void 0)(),
+    "quizStatus": enumType(["DRAFT", "REVIEWING", "PUBLISHED", "ARCHIVED"]),
+    "nlpTaskId": stringType().nullish(),
+    "questions": arrayType(objectType({
+      "id": (void 0)(),
+      "type": enumType(["QCM", "OUVERTE", "EXERCICE"]),
+      "content": stringType(),
+      "options": arrayType(stringType()).nullish(),
+      "correctAnswer": stringType(),
+      "explanation": stringType().nullish(),
+      "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+      "keywords": arrayType(stringType()).optional(),
+      "position": (void 0)()
+    })).optional(),
+    "createdAt": coerce.date().optional(),
+    "updatedAt": coerce.date().optional()
+  })),
+  "page": (void 0)(),
+  "size": (void 0)(),
+  "totalElements": (void 0)(),
+  "totalPages": (void 0)(),
+  "last": booleanType()
+});
+var createQuizBodyTitleMin = 3;
+var createQuizBodyTitleMax = 255;
+var createQuizBodyNbQuestionsMin = 3;
+var createQuizBodyNbQuestionsMax = 25;
+var CreateQuizBody = objectType({
+  "documentId": (void 0)(),
+  "title": stringType().min(createQuizBodyTitleMin).max(createQuizBodyTitleMax),
+  "description": stringType().optional(),
+  "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+  "nbQuestions": (void 0)().min(createQuizBodyNbQuestionsMin).max(createQuizBodyNbQuestionsMax),
+  "questionTypes": arrayType(enumType(["QCM", "OUVERTE", "EXERCICE"])).optional()
+});
+var CreateQuizResponse = objectType({
+  "id": (void 0)(),
+  "documentId": (void 0)().optional(),
+  "documentName": stringType().optional(),
+  "teacherId": (void 0)().optional(),
+  "teacherName": stringType().optional(),
+  "title": stringType(),
+  "description": stringType().nullish(),
+  "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+  "nbQuestions": (void 0)(),
+  "quizStatus": enumType(["DRAFT", "REVIEWING", "PUBLISHED", "ARCHIVED"]),
+  "nlpTaskId": stringType().nullish(),
+  "questions": arrayType(objectType({
+    "id": (void 0)(),
+    "type": enumType(["QCM", "OUVERTE", "EXERCICE"]),
+    "content": stringType(),
+    "options": arrayType(stringType()).nullish(),
+    "correctAnswer": stringType(),
+    "explanation": stringType().nullish(),
+    "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+    "keywords": arrayType(stringType()).optional(),
+    "position": (void 0)()
+  })).optional(),
+  "createdAt": coerce.date().optional(),
+  "updatedAt": coerce.date().optional()
+});
+var GetQuizParams = objectType({
+  "id": (void 0)()
+});
+var GetQuizResponse = objectType({
+  "id": (void 0)(),
+  "documentId": (void 0)().optional(),
+  "documentName": stringType().optional(),
+  "teacherId": (void 0)().optional(),
+  "teacherName": stringType().optional(),
+  "title": stringType(),
+  "description": stringType().nullish(),
+  "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+  "nbQuestions": (void 0)(),
+  "quizStatus": enumType(["DRAFT", "REVIEWING", "PUBLISHED", "ARCHIVED"]),
+  "nlpTaskId": stringType().nullish(),
+  "questions": arrayType(objectType({
+    "id": (void 0)(),
+    "type": enumType(["QCM", "OUVERTE", "EXERCICE"]),
+    "content": stringType(),
+    "options": arrayType(stringType()).nullish(),
+    "correctAnswer": stringType(),
+    "explanation": stringType().nullish(),
+    "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+    "keywords": arrayType(stringType()).optional(),
+    "position": (void 0)()
+  })).optional(),
+  "createdAt": coerce.date().optional(),
+  "updatedAt": coerce.date().optional()
+});
+var DeleteQuizParams = objectType({
+  "id": (void 0)()
+});
+var DeleteQuizResponse = voidType();
+var UpdateQuizQuestionsParams = objectType({
+  "id": (void 0)()
+});
+var UpdateQuizQuestionsBody = objectType({
+  "questions": arrayType(objectType({
+    "id": (void 0)().nullish(),
+    "type": enumType(["QCM", "OUVERTE", "EXERCICE"]),
+    "content": stringType(),
+    "options": arrayType(stringType()).nullish(),
+    "correctAnswer": stringType(),
+    "explanation": stringType().nullish(),
+    "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+    "keywords": arrayType(stringType()).optional(),
+    "position": (void 0)().nullish()
+  })),
+  "publish": booleanType()
+});
+var UpdateQuizQuestionsResponse = objectType({
+  "id": (void 0)(),
+  "documentId": (void 0)().optional(),
+  "documentName": stringType().optional(),
+  "teacherId": (void 0)().optional(),
+  "teacherName": stringType().optional(),
+  "title": stringType(),
+  "description": stringType().nullish(),
+  "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+  "nbQuestions": (void 0)(),
+  "quizStatus": enumType(["DRAFT", "REVIEWING", "PUBLISHED", "ARCHIVED"]),
+  "nlpTaskId": stringType().nullish(),
+  "questions": arrayType(objectType({
+    "id": (void 0)(),
+    "type": enumType(["QCM", "OUVERTE", "EXERCICE"]),
+    "content": stringType(),
+    "options": arrayType(stringType()).nullish(),
+    "correctAnswer": stringType(),
+    "explanation": stringType().nullish(),
+    "difficulty": enumType(["FACILE", "MOYEN", "DIFFICILE"]),
+    "keywords": arrayType(stringType()).optional(),
+    "position": (void 0)()
+  })).optional(),
+  "createdAt": coerce.date().optional(),
+  "updatedAt": coerce.date().optional()
+});
+var listSessionsQueryPageDefault = 0;
+var listSessionsQuerySizeDefault = 10;
+var ListSessionsQueryParams = objectType({
+  "page": coerce.number().int().default(listSessionsQueryPageDefault),
+  "size": coerce.number().int().default(listSessionsQuerySizeDefault)
+});
+var ListSessionsResponse = objectType({
+  "content": arrayType(objectType({
+    "id": (void 0)(),
+    "quizId": (void 0)(),
+    "quizTitle": stringType(),
+    "teacherId": (void 0)().optional(),
+    "startTime": coerce.date(),
+    "endTime": coerce.date(),
+    "accessCode": stringType().nullish(),
+    "sessionStatus": enumType(["SCHEDULED", "OPEN", "CLOSED", "CANCELLED"]),
+    "attemptCount": (void 0)().optional(),
+    "createdAt": coerce.date().optional()
+  })),
+  "page": (void 0)(),
+  "size": (void 0)(),
+  "totalElements": (void 0)(),
+  "totalPages": (void 0)(),
+  "last": booleanType()
+});
+var CreateSessionBody = objectType({
+  "quizId": (void 0)(),
+  "startTime": coerce.date(),
+  "endTime": coerce.date(),
+  "accessCode": stringType().nullish()
+});
+var CreateSessionResponse = objectType({
+  "id": (void 0)(),
+  "quizId": (void 0)(),
+  "quizTitle": stringType(),
+  "teacherId": (void 0)().optional(),
+  "startTime": coerce.date(),
+  "endTime": coerce.date(),
+  "accessCode": stringType().nullish(),
+  "sessionStatus": enumType(["SCHEDULED", "OPEN", "CLOSED", "CANCELLED"]),
+  "attemptCount": (void 0)().optional(),
+  "createdAt": coerce.date().optional()
+});
+var GetSessionParams = objectType({
+  "id": (void 0)()
+});
+var GetSessionResponse = objectType({
+  "id": (void 0)(),
+  "quizId": (void 0)(),
+  "quizTitle": stringType(),
+  "teacherId": (void 0)().optional(),
+  "startTime": coerce.date(),
+  "endTime": coerce.date(),
+  "accessCode": stringType().nullish(),
+  "sessionStatus": enumType(["SCHEDULED", "OPEN", "CLOSED", "CANCELLED"]),
+  "attemptCount": (void 0)().optional(),
+  "createdAt": coerce.date().optional()
+});
+var JoinSessionParams = objectType({
+  "id": (void 0)()
+});
+var JoinSessionBody = objectType({
+  "accessCode": stringType().nullish()
+});
+var JoinSessionResponse = objectType({
+  "id": (void 0)(),
+  "sessionId": (void 0)(),
+  "studentId": (void 0)(),
+  "studentName": stringType().optional(),
+  "answers": (void 0)({}).nullish(),
+  "score": (void 0)().nullish(),
+  "maxScore": (void 0)().nullish(),
+  "scorePercent": numberType().nullish(),
+  "attemptStatus": enumType(["IN_PROGRESS", "SUBMITTED", "EXPIRED"]),
+  "startedAt": coerce.date().optional(),
+  "completedAt": coerce.date().nullish()
+});
+var CancelSessionParams = objectType({
+  "id": (void 0)()
+});
+var CancelSessionResponse = voidType();
+var listMyAttemptsQueryPageDefault = 0;
+var listMyAttemptsQuerySizeDefault = 10;
+var ListMyAttemptsQueryParams = objectType({
+  "page": coerce.number().int().default(listMyAttemptsQueryPageDefault),
+  "size": coerce.number().int().default(listMyAttemptsQuerySizeDefault)
+});
+var ListMyAttemptsResponse = objectType({
+  "content": arrayType(objectType({
+    "id": (void 0)(),
+    "sessionId": (void 0)(),
+    "studentId": (void 0)(),
+    "studentName": stringType().optional(),
+    "answers": (void 0)({}).nullish(),
+    "score": (void 0)().nullish(),
+    "maxScore": (void 0)().nullish(),
+    "scorePercent": numberType().nullish(),
+    "attemptStatus": enumType(["IN_PROGRESS", "SUBMITTED", "EXPIRED"]),
+    "startedAt": coerce.date().optional(),
+    "completedAt": coerce.date().nullish()
+  })),
+  "page": (void 0)(),
+  "size": (void 0)(),
+  "totalElements": (void 0)(),
+  "totalPages": (void 0)(),
+  "last": booleanType()
+});
+var GetAttemptParams = objectType({
+  "id": (void 0)()
+});
+var GetAttemptResponse = objectType({
+  "id": (void 0)(),
+  "sessionId": (void 0)(),
+  "studentId": (void 0)(),
+  "studentName": stringType().optional(),
+  "answers": (void 0)({}).nullish(),
+  "score": (void 0)().nullish(),
+  "maxScore": (void 0)().nullish(),
+  "scorePercent": numberType().nullish(),
+  "attemptStatus": enumType(["IN_PROGRESS", "SUBMITTED", "EXPIRED"]),
+  "startedAt": coerce.date().optional(),
+  "completedAt": coerce.date().nullish()
+});
+var SubmitAttemptParams = objectType({
+  "id": (void 0)()
+});
+var SubmitAttemptBody = objectType({
+  "answers": recordType(stringType(), stringType())
+});
+var SubmitAttemptResponse = objectType({
+  "id": (void 0)(),
+  "sessionId": (void 0)(),
+  "studentId": (void 0)(),
+  "studentName": stringType().optional(),
+  "answers": (void 0)({}).nullish(),
+  "score": (void 0)().nullish(),
+  "maxScore": (void 0)().nullish(),
+  "scorePercent": numberType().nullish(),
+  "attemptStatus": enumType(["IN_PROGRESS", "SUBMITTED", "EXPIRED"]),
+  "startedAt": coerce.date().optional(),
+  "completedAt": coerce.date().nullish()
+});
+var GetQuizAnalyticsParams = objectType({
+  "quizId": (void 0)()
+});
+var GetQuizAnalyticsResponse = objectType({
+  "quizId": (void 0)(),
+  "quizTitle": stringType(),
+  "totalAttempts": (void 0)(),
+  "averageScore": numberType(),
+  "successRate": numberType(),
+  "questionStats": arrayType(objectType({
+    "questionId": (void 0)(),
+    "content": stringType(),
+    "totalAnswers": (void 0)(),
+    "correctAnswers": (void 0)(),
+    "correctRate": numberType()
+  }))
+});
+var GetStudentDashboardResponse = objectType({
+  "studentId": (void 0)(),
+  "studentName": stringType(),
+  "totalAttempts": (void 0)(),
+  "averageScore": numberType(),
+  "recentAttempts": arrayType(objectType({
+    "attemptId": (void 0)(),
+    "sessionId": (void 0)(),
+    "quizTitle": stringType(),
+    "score": (void 0)().nullish(),
+    "maxScore": (void 0)().nullish(),
+    "scorePercent": numberType().nullish(),
+    "status": stringType(),
+    "completedAt": coerce.date().nullish()
+  }))
 });
 
 // src/routes/health.ts
