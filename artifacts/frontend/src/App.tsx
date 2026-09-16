@@ -7,11 +7,14 @@ import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
 import { AuthProvider } from '@/components/auth-provider';
 import { SyncUserGuard } from '@/components/sync-user-guard';
-import { EnseignantGuard, EtudiantGuard } from '@/components/route-guards';
+import { AdminGuard, EnseignantGuard, EtudiantGuard } from '@/components/route-guards';
 
 // Pages
 import NotFound from '@/pages/not-found';
 import Login from '@/pages/login';
+
+// Admin Pages
+import AdminDashboard from '@/pages/admin/dashboard';
 
 // Enseignant Pages
 import EnseignantDashboard from '@/pages/enseignant/dashboard';
@@ -38,6 +41,11 @@ function Router() {
       <Switch>
         {/* Public / Auth */}
         <Route path="/" component={Login} />
+
+        {/* Admin Routes */}
+        <Route path="/admin">
+          <AdminGuard><SyncUserGuard><AdminDashboard /></SyncUserGuard></AdminGuard>
+        </Route>
         
         {/* Enseignant Routes */}
         <Route path="/enseignant">

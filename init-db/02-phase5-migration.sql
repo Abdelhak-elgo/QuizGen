@@ -22,23 +22,23 @@ CREATE OR REPLACE VIEW v_attempt_detail AS
 SELECT
     at.id                AS attempt_id,
     at.session_id,
-    at.student_id,
+    at.user_id            AS student_id,
     u.email              AS student_email,
     u.first_name || ' ' || u.last_name AS student_name,
     q.id                 AS quiz_id,
     q.title              AS quiz_title,
     at.score,
-    at.max_score,
+    q.nb_questions       AS max_score,
     CASE
-        WHEN at.max_score > 0
-        THEN ROUND((at.score::numeric / at.max_score) * 100, 1)
+        WHEN q.nb_questions > 0
+        THEN ROUND((at.score::numeric / q.nb_questions) * 100, 1)
         ELSE 0
     END                  AS score_percent,
-    at.attempt_status,
+    at.status             AS attempt_status,
     at.bert_score_details,
     at.started_at,
-    at.completed_at
+    at.submitted_at       AS completed_at
 FROM attempts at
 JOIN sessions s ON s.id = at.session_id
 JOIN quizzes  q ON q.id = s.quiz_id
-JOIN users    u ON u.id = at.student_id;
+JOIN users    u ON u.id = at.user_id;

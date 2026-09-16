@@ -16,7 +16,9 @@ export default function Login() {
   }
 
   if (user) {
-    if (role === 'ENSEIGNANT' || role === 'ADMIN') {
+    if (role === 'ADMIN') {
+      return <Redirect to="/admin" />;
+    } else if (role === 'ENSEIGNANT') {
       return <Redirect to="/enseignant" />;
     } else {
       return <Redirect to="/etudiant" />;
