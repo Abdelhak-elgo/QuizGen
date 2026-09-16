@@ -7,13 +7,6 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 CREATE EXTENSION IF NOT EXISTS "pg_trgm";  -- Recherche full-text
 
--- ── Enums ────────────────────────────────────────────────────────────────────
-CREATE TYPE role_enum             AS ENUM ('ENSEIGNANT', 'ETUDIANT', 'ADMIN');
-CREATE TYPE question_type_enum    AS ENUM ('QCM', 'OUVERTE', 'EXERCICE');
-CREATE TYPE difficulty_enum       AS ENUM ('FACILE', 'MOYEN', 'DIFFICILE');
-CREATE TYPE session_status_enum   AS ENUM ('PLANIFIEE', 'ACTIVE', 'TERMINEE', 'ANNULEE');
-CREATE TYPE attempt_status_enum   AS ENUM ('IN_PROGRESS', 'SUBMITTED', 'EXPIRED');
-
 -- ── Table : users ─────────────────────────────────────────────────────────────
 CREATE TABLE users (
     id            UUID        PRIMARY KEY DEFAULT uuid_generate_v4(),
@@ -21,10 +14,12 @@ CREATE TABLE users (
     email         VARCHAR(255) NOT NULL UNIQUE,
     first_name    VARCHAR(100),
     last_name     VARCHAR(100),
-    role          role_enum   NOT NULL DEFAULT 'ETUDIANT',
+    role          VARCHAR(20) NOT NULL DEFAULT 'ETUDIANT',
     is_active     BOOLEAN     NOT NULL DEFAULT TRUE,
     created_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMP   NOT NULL DEFAULT NOW()
+    updated_at    TIMESTAMP   NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_users_role
+        CHECK (role IN ('ENSEIGNANT', 'ETUDIANT', 'ADMIN'))
 );
 
 -- ── Table : documents ─────────────────────────────────────────────────────────
@@ -46,30 +41,41 @@ CREATE TABLE documents (
 CREATE TABLE quizzes (
     id            UUID            PRIMARY KEY DEFAULT uuid_generate_v4(),
     document_id   UUID            NOT NULL REFERENCES documents(id) ON DELETE RESTRICT,
-    user_id       UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    teacher_id    UUID            NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title         VARCHAR(255)    NOT NULL,
     description   TEXT,
-    difficulty    difficulty_enum NOT NULL DEFAULT 'MOYEN',
+    difficulty    VARCHAR(20)     NOT NULL DEFAULT 'MOYEN',
     nb_questions  INTEGER         NOT NULL CHECK (nb_questions BETWEEN 3 AND 25),
+    quiz_status   VARCHAR(20)     NOT NULL DEFAULT 'DRAFT',
+    nlp_task_id   VARCHAR(100),
     is_published  BOOLEAN         NOT NULL DEFAULT FALSE,
     created_at    TIMESTAMP       NOT NULL DEFAULT NOW(),
-    updated_at    TIMESTAMP       NOT NULL DEFAULT NOW()
+    updated_at    TIMESTAMP       NOT NULL DEFAULT NOW(),
+    CONSTRAINT chk_quizzes_difficulty
+        CHECK (difficulty IN ('FACILE', 'MOYEN', 'DIFFICILE')),
+    CONSTRAINT chk_quizzes_status
+        CHECK (quiz_status IN ('DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED'))
 );
 
 -- ── Table : questions ─────────────────────────────────────────────────────────
 CREATE TABLE questions (
     id               UUID               PRIMARY KEY DEFAULT uuid_generate_v4(),
     quiz_id          UUID               NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    type             question_type_enum NOT NULL,
+    type             VARCHAR(20)        NOT NULL,
     content          TEXT               NOT NULL,
     options          JSONB,             -- Pour QCM : ["opt1", "opt2", "opt3", "opt4"]
     correct_answer   TEXT               NOT NULL,
     explanation      TEXT,
-    difficulty       difficulty_enum    NOT NULL DEFAULT 'MOYEN',
+    difficulty       VARCHAR(20)        NOT NULL DEFAULT 'MOYEN',
+    keywords         JSONB,
     position         INTEGER            NOT NULL DEFAULT 0,
     created_at       TIMESTAMP          NOT NULL DEFAULT NOW(),
     updated_at       TIMESTAMP          NOT NULL DEFAULT NOW(),
     -- Contrainte : QCM doit avoir exactement 4 options
+    CONSTRAINT chk_questions_type
+        CHECK (type IN ('QCM', 'OUVERTE', 'EXERCICE')),
+    CONSTRAINT chk_questions_difficulty
+        CHECK (difficulty IN ('FACILE', 'MOYEN', 'DIFFICILE')),
     CONSTRAINT qcm_has_4_options CHECK (
         type != 'QCM' OR jsonb_array_length(options) = 4
     )
@@ -79,16 +85,18 @@ CREATE TABLE questions (
 CREATE TABLE sessions (
     id           UUID                 PRIMARY KEY DEFAULT uuid_generate_v4(),
     quiz_id      UUID                 NOT NULL REFERENCES quizzes(id) ON DELETE CASCADE,
-    user_id      UUID                 NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    teacher_id   UUID                 NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     title        VARCHAR(255),
     access_code  VARCHAR(20),
-    status       session_status_enum  NOT NULL DEFAULT 'PLANIFIEE',
+    session_status VARCHAR(20)          NOT NULL DEFAULT 'SCHEDULED',
     start_time   TIMESTAMP            NOT NULL,
     end_time     TIMESTAMP            NOT NULL,
     max_attempts INTEGER              NOT NULL DEFAULT 1,
     created_at   TIMESTAMP            NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMP            NOT NULL DEFAULT NOW(),
-    CONSTRAINT end_after_start CHECK (end_time > start_time)
+    CONSTRAINT end_after_start CHECK (end_time > start_time),
+    CONSTRAINT chk_sessions_status
+        CHECK (session_status IN ('SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED'))
 );
 
 -- ── Table : attempts ──────────────────────────────────────────────────────────
@@ -96,7 +104,7 @@ CREATE TABLE attempts (
     id             UUID                PRIMARY KEY DEFAULT uuid_generate_v4(),
     session_id     UUID                NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
     student_id     UUID                NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    attempt_status attempt_status_enum NOT NULL DEFAULT 'IN_PROGRESS',
+    attempt_status VARCHAR(20)         NOT NULL DEFAULT 'IN_PROGRESS',
     answers        JSONB,              -- {"question_id": "réponse_étudiant", ...}
     score          INTEGER             NOT NULL DEFAULT 0,
     max_score      INTEGER,
@@ -105,7 +113,9 @@ CREATE TABLE attempts (
     created_at     TIMESTAMP           NOT NULL DEFAULT NOW(),
     updated_at     TIMESTAMP           NOT NULL DEFAULT NOW(),
     -- Un étudiant = une seule tentative par session
-    CONSTRAINT uq_attempt_session_student UNIQUE (session_id, student_id)
+    CONSTRAINT uq_attempt_session_student UNIQUE (session_id, student_id),
+    CONSTRAINT chk_attempts_status
+        CHECK (attempt_status IN ('IN_PROGRESS', 'SUBMITTED', 'EXPIRED'))
 );
 
 -- ── Table : analytics ─────────────────────────────────────────────────────────
@@ -127,7 +137,7 @@ CREATE INDEX idx_users_role         ON users(role);
 CREATE INDEX idx_documents_user_id  ON documents(user_id);
 CREATE INDEX idx_documents_created  ON documents(created_at DESC);
 
-CREATE INDEX idx_quizzes_user_id    ON quizzes(user_id);
+CREATE INDEX idx_quizzes_teacher    ON quizzes(teacher_id);
 CREATE INDEX idx_quizzes_document   ON quizzes(document_id);
 CREATE INDEX idx_quizzes_published  ON quizzes(is_published);
 
@@ -135,7 +145,7 @@ CREATE INDEX idx_questions_quiz_id  ON questions(quiz_id);
 CREATE INDEX idx_questions_type     ON questions(type);
 
 CREATE INDEX idx_sessions_quiz_id   ON sessions(quiz_id);
-CREATE INDEX idx_sessions_status    ON sessions(status);
+CREATE INDEX idx_sessions_status    ON sessions(session_status);
 CREATE INDEX idx_sessions_times     ON sessions(start_time, end_time);
 
 CREATE INDEX idx_attempts_session   ON attempts(session_id);
@@ -184,7 +194,7 @@ SELECT
     q.title,
     q.difficulty,
     q.nb_questions,
-    q.is_published,
+    q.quiz_status,
     u.email         AS teacher_email,
     d.original_filename AS source_document,
     a.total_attempts,
@@ -192,7 +202,7 @@ SELECT
     a.pass_rate,
     q.created_at
 FROM quizzes q
-JOIN users     u ON u.id = q.user_id
+JOIN users     u ON u.id = q.teacher_id
 JOIN documents d ON d.id = q.document_id
 LEFT JOIN analytics a ON a.quiz_id = q.id;
 
