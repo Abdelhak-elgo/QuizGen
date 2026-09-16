@@ -12,7 +12,7 @@ CREATE TYPE role_enum             AS ENUM ('ENSEIGNANT', 'ETUDIANT', 'ADMIN');
 CREATE TYPE question_type_enum    AS ENUM ('QCM', 'OUVERTE', 'EXERCICE');
 CREATE TYPE difficulty_enum       AS ENUM ('FACILE', 'MOYEN', 'DIFFICILE');
 CREATE TYPE session_status_enum   AS ENUM ('PLANIFIEE', 'ACTIVE', 'TERMINEE', 'ANNULEE');
-CREATE TYPE attempt_status_enum   AS ENUM ('EN_COURS', 'SOUMIS', 'CORRIGE');
+CREATE TYPE attempt_status_enum   AS ENUM ('IN_PROGRESS', 'SUBMITTED', 'EXPIRED');
 
 -- ── Table : users ─────────────────────────────────────────────────────────────
 CREATE TABLE users (
@@ -93,18 +93,19 @@ CREATE TABLE sessions (
 
 -- ── Table : attempts ──────────────────────────────────────────────────────────
 CREATE TABLE attempts (
-    id           UUID                PRIMARY KEY DEFAULT uuid_generate_v4(),
-    session_id   UUID                NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
-    user_id      UUID                NOT NULL REFERENCES users(id) ON DELETE CASCADE,
-    status       attempt_status_enum NOT NULL DEFAULT 'EN_COURS',
-    answers      JSONB,              -- {"question_id": "réponse_étudiant", ...}
-    score        NUMERIC(5,2),
-    started_at   TIMESTAMP           NOT NULL DEFAULT NOW(),
-    submitted_at TIMESTAMP,
-    created_at   TIMESTAMP           NOT NULL DEFAULT NOW(),
-    updated_at   TIMESTAMP           NOT NULL DEFAULT NOW(),
+    id             UUID                PRIMARY KEY DEFAULT uuid_generate_v4(),
+    session_id     UUID                NOT NULL REFERENCES sessions(id) ON DELETE CASCADE,
+    student_id     UUID                NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    attempt_status attempt_status_enum NOT NULL DEFAULT 'IN_PROGRESS',
+    answers        JSONB,              -- {"question_id": "réponse_étudiant", ...}
+    score          INTEGER             NOT NULL DEFAULT 0,
+    max_score      INTEGER,
+    started_at     TIMESTAMP           NOT NULL DEFAULT NOW(),
+    completed_at   TIMESTAMP,
+    created_at     TIMESTAMP           NOT NULL DEFAULT NOW(),
+    updated_at     TIMESTAMP           NOT NULL DEFAULT NOW(),
     -- Un étudiant = une seule tentative par session
-    CONSTRAINT unique_attempt_per_student_session UNIQUE (session_id, user_id)
+    CONSTRAINT uq_attempt_session_student UNIQUE (session_id, student_id)
 );
 
 -- ── Table : analytics ─────────────────────────────────────────────────────────
@@ -138,8 +139,8 @@ CREATE INDEX idx_sessions_status    ON sessions(status);
 CREATE INDEX idx_sessions_times     ON sessions(start_time, end_time);
 
 CREATE INDEX idx_attempts_session   ON attempts(session_id);
-CREATE INDEX idx_attempts_user      ON attempts(user_id);
-CREATE INDEX idx_attempts_status    ON attempts(status);
+CREATE INDEX idx_attempts_student   ON attempts(student_id);
+CREATE INDEX idx_attempts_status    ON attempts(attempt_status);
 
 CREATE INDEX idx_analytics_quiz     ON analytics(quiz_id);
 
@@ -197,19 +198,20 @@ LEFT JOIN analytics a ON a.quiz_id = q.id;
 
 CREATE OR REPLACE VIEW v_student_dashboard AS
 SELECT
-    at.user_id,
+    at.student_id,
     u.email,
     s.quiz_id,
     q.title        AS quiz_title,
     at.score,
-    at.status,
-    at.submitted_at,
+    at.max_score,
+    at.attempt_status,
+    at.completed_at,
     s.start_time,
     s.end_time
 FROM attempts at
 JOIN sessions s ON s.id = at.session_id
 JOIN quizzes  q ON q.id = s.quiz_id
-JOIN users    u ON u.id = at.user_id;
+JOIN users    u ON u.id = at.student_id;
 
 -- ── Données de test ───────────────────────────────────────────────────────────
 INSERT INTO users (keycloak_id, email, first_name, last_name, role) VALUES
