@@ -42,22 +42,25 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       .then((authenticated) => {
         if (authenticated) {
           setAuthTokenGetter(() => keycloak.token ?? null);
-          
-          keycloak.loadUserProfile().then((profile) => {
-            setUser(profile);
-            
-            // Extract role from token
-            let decodedRole: UserRole = null;
-            if (keycloak.tokenParsed?.realm_access?.roles) {
-              const roles = keycloak.tokenParsed.realm_access.roles;
-              if (roles.includes('admin')) decodedRole = 'ADMIN';
-              else if (roles.includes('enseignant')) decodedRole = 'ENSEIGNANT';
-              else if (roles.includes('etudiant')) decodedRole = 'ETUDIANT';
-            }
-            // Fallback for role mapping if missing
-            if (!decodedRole) decodedRole = 'ETUDIANT';
-            setRole(decodedRole);
+
+          const token = keycloak.tokenParsed;
+          setUser({
+            id: token?.sub,
+            username: token?.preferred_username,
+            email: token?.email,
+            firstName: token?.given_name,
+            lastName: token?.family_name,
           });
+
+          const roles = (token?.realm_access?.roles ?? []).map((item) =>
+            item.toUpperCase(),
+          );
+          let decodedRole: UserRole = null;
+          if (roles.includes('ADMIN')) decodedRole = 'ADMIN';
+          else if (roles.includes('ENSEIGNANT')) decodedRole = 'ENSEIGNANT';
+          else if (roles.includes('ETUDIANT')) decodedRole = 'ETUDIANT';
+
+          setRole(decodedRole ?? 'ETUDIANT');
         }
         setIsInitialized(true);
       })
