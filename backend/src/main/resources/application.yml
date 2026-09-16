@@ -36,6 +36,13 @@ spring:
           issuer-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:quizgen}
           jwk-set-uri: ${KEYCLOAK_URL:http://localhost:8180}/realms/${KEYCLOAK_REALM:quizgen}/protocol/openid-connect/certs
 
+keycloak:
+  auth-server-url: ${KEYCLOAK_URL:http://localhost:8180}
+  realm: ${KEYCLOAK_REALM:quizgen}
+  resource: ${KEYCLOAK_CLIENT_ID:quizgen-api}
+  credentials:
+    secret: ${KEYCLOAK_CLIENT_SECRET:your-client-secret}
+
 minio:
   url: ${MINIO_URL:http://localhost:9000}
   access-key: ${MINIO_ACCESS_KEY:minioadmin}
