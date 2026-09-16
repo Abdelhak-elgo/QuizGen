@@ -3,60 +3,58 @@ package ma.quizgen.entity;
 import jakarta.persistence.*;
 import lombok.*;
 import org.hibernate.annotations.CreationTimestamp;
-import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
+import org.hibernate.annotations.UpdateTimestamp;
 
 import java.time.LocalDateTime;
-import java.util.Map;
+import java.util.UUID;
 
 @Entity
 @Table(name = "documents")
-@Getter @Setter
-@NoArgsConstructor @AllArgsConstructor
+@Getter
+@Setter
+@NoArgsConstructor
+@AllArgsConstructor
 @Builder
 public class Document {
 
     @Id
-    @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    @GeneratedValue(strategy = GenerationType.UUID)
+    private UUID id;
 
-    @Column(nullable = false)
-    private String filename;
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "user_id", nullable = false)
+    private User user;
 
-    @Column(name = "original_name", nullable = false)
-    private String originalName;
+    @Column(name = "original_filename", nullable = false, length = 255)
+    private String originalFilename;
 
-    @Column(name = "content_text", columnDefinition = "TEXT")
-    private String contentText;
+    @Column(name = "bucket_name", nullable = false, length = 100)
+    private String bucketName;
 
-    @Column(name = "file_size", nullable = false)
-    private Long fileSize;
-
-    @Column(name = "mime_type", nullable = false)
-    @Builder.Default
-    private String mimeType = "application/pdf";
-
-    @Column(name = "bucket_name", nullable = false)
-    @Builder.Default
-    private String bucketName = "quizgen-documents";
-
-    @Column(name = "object_key", nullable = false, unique = true)
+    @Column(name = "object_key", nullable = false, length = 500)
     private String objectKey;
 
+    /**
+     * ETag returned by MinIO after successful upload — used for integrity checks.
+     */
+    @Column(length = 100)
     private String etag;
+
+    @Column(name = "file_size")
+    private Long fileSize;
 
     @Column(name = "page_count")
     private Integer pageCount;
 
-    @JdbcTypeCode(SqlTypes.JSON)
-    @Column(columnDefinition = "jsonb")
-    private Map<String, Object> keywords;
-
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "uploaded_by", nullable = false)
-    private User uploadedBy;
+    @Column(name = "is_processed", nullable = false)
+    @Builder.Default
+    private Boolean isProcessed = false;
 
     @CreationTimestamp
-    @Column(name = "uploaded_at", nullable = false, updatable = false)
-    private LocalDateTime uploadedAt;
+    @Column(name = "created_at", updatable = false)
+    private LocalDateTime createdAt;
+
+    @UpdateTimestamp
+    @Column(name = "updated_at")
+    private LocalDateTime updatedAt;
 }

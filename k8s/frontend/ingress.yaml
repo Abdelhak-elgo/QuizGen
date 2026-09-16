@@ -1,0 +1,44 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: quizgen-ingress
+  namespace: quizgen
+  labels:
+    app.kubernetes.io/part-of: quizgen-platform
+  annotations:
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+    nginx.ingress.kubernetes.io/proxy-body-size: "52m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "300"
+    # TLS — décommenter et configurer cert-manager en production
+    # cert-manager.io/cluster-issuer: letsencrypt-prod
+spec:
+  ingressClassName: nginx
+  # tls:
+  #   - hosts:
+  #       - quizgen.ma
+  #     secretName: quizgen-tls
+  rules:
+    - host: quizgen.ma   # Remplacer par votre domaine
+      http:
+        paths:
+          - path: /api(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: backend
+                port:
+                  number: 8080
+          - path: /auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: keycloak
+                port:
+                  number: 8080
+          - path: /(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: frontend
+                port:
+                  number: 80

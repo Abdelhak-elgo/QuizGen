@@ -1,31 +1,71 @@
-# Environnement
+# Environment
 .env
+!.env.example
+
+# Maven
+backend/target/
+backend/.mvn/
+!backend/.mvn/wrapper/maven-wrapper.jar
+backend/mvnw
+backend/mvnw.cmd
+
+# Python
+nlp-service/__pycache__/
+nlp-service/.venv/
+nlp-service/*.egg-info/
+nlp-service/.pytest_cache/
+nlp-service/htmlcov/
+nlp-service/.coverage
+nlp-service/dist/
+
+# Node / frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.env
+frontend/.env.local
 
 # IDE
 .idea/
 .vscode/
 *.iml
 
-# Build
-target/
-*.class
-*.jar
-
-# Python
-__pycache__/
-*.pyc
-.venv/
-
-# Node
-node_modules/
-dist/
-
-# Docker volumes (local)
-postgres_data/
-redis_data/
-minio_data/
-ollama_data/
-
 # OS
 .DS_Store
 Thumbs.db
+
+# Docker volumes (data persistée localement)
+postgres-data/
+minio-data/
+redis-data/
+ollama-data/
+
+# Logs
+*.log
+logs/
+
+# Test reports
+backend/target/surefire-reports/
+nlp-service/htmlcov/
+
+# E2E Playwright
+e2e/node_modules/
+e2e/playwright-report/
+e2e/results/
+e2e/test-results/
+e2e/.cache/
+e2e/fixtures/sample.pdf
+
+# Évaluation IA (corpus non versionné — contient des PDFs pédagogiques)
+evaluation/corpus/*/
+!evaluation/corpus/.gitkeep
+
+# Scripts de performance
+scripts/performance-report.txt
+
+# Docker Compose prod (peut contenir des valeurs d'env)
+.env.prod
+
+# Monitoring data
+monitoring/grafana/data/
+prometheus-data/
+grafana-data/
