@@ -133,9 +133,9 @@ class SessionServiceImplTest {
             .score(0).maxScore(5).attemptStatus(AttemptStatus.IN_PROGRESS).build();
 
         when(sessionRepository.findById(openSession.getId())).thenReturn(Optional.of(openSession));
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
         when(attemptRepository.findBySession_IdAndStudent_Id(openSession.getId(), student.getId()))
             .thenReturn(Optional.empty());
-        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
         when(attemptRepository.save(any())).thenReturn(attempt);
 
         AttemptDto result = sessionService.join(openSession.getId(), null, STUDENT_KC);
@@ -174,6 +174,7 @@ class SessionServiceImplTest {
             .score(0).maxScore(5).attemptStatus(AttemptStatus.IN_PROGRESS).build();
 
         when(sessionRepository.findById(openSession.getId())).thenReturn(Optional.of(openSession));
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
         when(attemptRepository.findBySession_IdAndStudent_Id(openSession.getId(), student.getId()))
             .thenReturn(Optional.of(existing));
 

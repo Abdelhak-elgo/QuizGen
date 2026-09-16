@@ -1,5 +1,5 @@
 # ── Stage 1 : Build ──────────────────────────────────────────────────────────
-FROM eclipse-temurin:21-jdk-alpine AS builder
+FROM maven:3.9.9-eclipse-temurin-21-alpine AS builder
 WORKDIR /app
 
 # Cache Maven dependencies
@@ -9,7 +9,7 @@ RUN --mount=type=cache,target=/root/.m2 \
 
 COPY src ./src
 RUN --mount=type=cache,target=/root/.m2 \
-    ./mvnw -q package -DskipTests
+    mvn -q package -DskipTests
 
 # ── Stage 2 : Runtime ────────────────────────────────────────────────────────
 FROM eclipse-temurin:21-jre-alpine
