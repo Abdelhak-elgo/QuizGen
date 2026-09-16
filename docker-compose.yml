@@ -178,6 +178,7 @@ services:
       DB_USER:             ${DB_USER:-quizgen}
       DB_PASS:             ${DB_PASS:-quizgen_secret_2025}
       KEYCLOAK_URL:        http://keycloak:8080
+      KEYCLOAK_ISSUER_URL: ${KEYCLOAK_ISSUER_URL:-http://localhost:8180}
       KEYCLOAK_REALM:      quizgen
       MINIO_URL:           http://minio:9000
       MINIO_ACCESS_KEY:    ${MINIO_ACCESS_KEY:-minioadmin}

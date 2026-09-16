@@ -9,6 +9,7 @@ import org.springframework.stereotype.Component;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.stream.Collectors;
 
@@ -33,6 +34,7 @@ public class KeycloakRoleConverter implements Converter<Jwt, Collection<GrantedA
         }
 
         return roles.stream()
+            .map(role -> role.toUpperCase(Locale.ROOT))
             .map(role -> new SimpleGrantedAuthority("ROLE_" + role))
             .collect(Collectors.toList());
     }
