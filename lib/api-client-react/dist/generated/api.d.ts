@@ -10,7 +10,7 @@ export declare const getHealthCheckUrl: () => string;
  * @summary Health check
  */
 export declare const healthCheck: (options?: Parameters<typeof customFetch>[1]) => Promise<HealthStatus>;
-export declare const getHealthCheckQueryKey: () => readonly ["/api/healthz"];
+export declare const getHealthCheckQueryKey: () => readonly ["/healthz"];
 export declare const getHealthCheckQueryOptions: <TData = Awaited<ReturnType<typeof healthCheck>>, TError = ErrorType<unknown>>(options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof healthCheck>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -51,7 +51,7 @@ export declare const getGetMeUrl: () => string;
  * @summary Profil de l'utilisateur connecté
  */
 export declare const getMe: (options?: Parameters<typeof customFetch>[1]) => Promise<User>;
-export declare const getGetMeQueryKey: () => readonly ["/api/users/me"];
+export declare const getGetMeQueryKey: () => readonly ["/users/me"];
 export declare const getGetMeQueryOptions: <TData = Awaited<ReturnType<typeof getMe>>, TError = ErrorType<unknown>>(options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getMe>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -74,7 +74,7 @@ export declare const getListUsersUrl: (params?: ListUsersParams) => string;
  * @summary Liste paginée des utilisateurs (ADMIN)
  */
 export declare const listUsers: (params?: ListUsersParams, options?: Parameters<typeof customFetch>[1]) => Promise<UserPage>;
-export declare const getListUsersQueryKey: (params?: ListUsersParams) => readonly ["/api/users", ...ListUsersParams[]];
+export declare const getListUsersQueryKey: (params?: ListUsersParams) => readonly ["/users", ...ListUsersParams[]];
 export declare const getListUsersQueryOptions: <TData = Awaited<ReturnType<typeof listUsers>>, TError = ErrorType<unknown>>(params?: ListUsersParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof listUsers>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -97,7 +97,7 @@ export declare const getListDocumentsUrl: (params?: ListDocumentsParams) => stri
  * @summary Mes documents PDF
  */
 export declare const listDocuments: (params?: ListDocumentsParams, options?: Parameters<typeof customFetch>[1]) => Promise<DocumentPage>;
-export declare const getListDocumentsQueryKey: (params?: ListDocumentsParams) => readonly ["/api/documents", ...ListDocumentsParams[]];
+export declare const getListDocumentsQueryKey: (params?: ListDocumentsParams) => readonly ["/documents", ...ListDocumentsParams[]];
 export declare const getListDocumentsQueryOptions: <TData = Awaited<ReturnType<typeof listDocuments>>, TError = ErrorType<unknown>>(params?: ListDocumentsParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof listDocuments>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -147,7 +147,7 @@ export declare const getGetDocumentUrl: (id: string) => string;
  * @summary Détail d'un document
  */
 export declare const getDocument: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<Document>;
-export declare const getGetDocumentQueryKey: (id: string) => readonly [`/api/documents/${string}`];
+export declare const getGetDocumentQueryKey: (id: string) => readonly [`/documents/${string}`];
 export declare const getGetDocumentQueryOptions: <TData = Awaited<ReturnType<typeof getDocument>>, TError = ErrorType<unknown>>(id: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDocument>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -196,7 +196,7 @@ export declare const getGetDocumentDownloadUrlUrl: (id: string) => string;
  * @summary URL présignée MinIO pour télécharger le PDF
  */
 export declare const getDocumentDownloadUrl: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<DownloadUrl>;
-export declare const getGetDocumentDownloadUrlQueryKey: (id: string) => readonly [`/api/documents/${string}/download-url`];
+export declare const getGetDocumentDownloadUrlQueryKey: (id: string) => readonly [`/documents/${string}/download-url`];
 export declare const getGetDocumentDownloadUrlQueryOptions: <TData = Awaited<ReturnType<typeof getDocumentDownloadUrl>>, TError = ErrorType<unknown>>(id: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getDocumentDownloadUrl>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -219,7 +219,7 @@ export declare const getListQuizzesUrl: (params?: ListQuizzesParams) => string;
  * @summary Mes quiz
  */
 export declare const listQuizzes: (params?: ListQuizzesParams, options?: Parameters<typeof customFetch>[1]) => Promise<QuizPage>;
-export declare const getListQuizzesQueryKey: (params?: ListQuizzesParams) => readonly ["/api/quizzes", ...ListQuizzesParams[]];
+export declare const getListQuizzesQueryKey: (params?: ListQuizzesParams) => readonly ["/quizzes", ...ListQuizzesParams[]];
 export declare const getListQuizzesQueryOptions: <TData = Awaited<ReturnType<typeof listQuizzes>>, TError = ErrorType<unknown>>(params?: ListQuizzesParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof listQuizzes>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -269,7 +269,7 @@ export declare const getGetQuizUrl: (id: string) => string;
  * @summary Détail d'un quiz avec ses questions
  */
 export declare const getQuiz: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<Quiz>;
-export declare const getGetQuizQueryKey: (id: string) => readonly [`/api/quizzes/${string}`];
+export declare const getGetQuizQueryKey: (id: string) => readonly [`/quizzes/${string}`];
 export declare const getGetQuizQueryOptions: <TData = Awaited<ReturnType<typeof getQuiz>>, TError = ErrorType<unknown>>(id: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQuiz>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -349,7 +349,7 @@ export declare const getListSessionsUrl: (params?: ListSessionsParams) => string
  * @summary Mes sessions
  */
 export declare const listSessions: (params?: ListSessionsParams, options?: Parameters<typeof customFetch>[1]) => Promise<SessionPage>;
-export declare const getListSessionsQueryKey: (params?: ListSessionsParams) => readonly ["/api/sessions", ...ListSessionsParams[]];
+export declare const getListSessionsQueryKey: (params?: ListSessionsParams) => readonly ["/sessions", ...ListSessionsParams[]];
 export declare const getListSessionsQueryOptions: <TData = Awaited<ReturnType<typeof listSessions>>, TError = ErrorType<unknown>>(params?: ListSessionsParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof listSessions>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -399,7 +399,7 @@ export declare const getGetSessionUrl: (id: string) => string;
  * @summary Détail d'une session
  */
 export declare const getSession: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<Session>;
-export declare const getGetSessionQueryKey: (id: string) => readonly [`/api/sessions/${string}`];
+export declare const getGetSessionQueryKey: (id: string) => readonly [`/sessions/${string}`];
 export declare const getGetSessionQueryOptions: <TData = Awaited<ReturnType<typeof getSession>>, TError = ErrorType<unknown>>(id: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getSession>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -479,7 +479,7 @@ export declare const getListMyAttemptsUrl: (params?: ListMyAttemptsParams) => st
  * @summary Historique de mes tentatives
  */
 export declare const listMyAttempts: (params?: ListMyAttemptsParams, options?: Parameters<typeof customFetch>[1]) => Promise<AttemptPage>;
-export declare const getListMyAttemptsQueryKey: (params?: ListMyAttemptsParams) => readonly ["/api/attempts/my", ...ListMyAttemptsParams[]];
+export declare const getListMyAttemptsQueryKey: (params?: ListMyAttemptsParams) => readonly ["/attempts/my", ...ListMyAttemptsParams[]];
 export declare const getListMyAttemptsQueryOptions: <TData = Awaited<ReturnType<typeof listMyAttempts>>, TError = ErrorType<unknown>>(params?: ListMyAttemptsParams, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof listMyAttempts>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -502,7 +502,7 @@ export declare const getGetAttemptUrl: (id: string) => string;
  * @summary Détail d'une tentative
  */
 export declare const getAttempt: (id: string, options?: Parameters<typeof customFetch>[1]) => Promise<Attempt>;
-export declare const getGetAttemptQueryKey: (id: string) => readonly [`/api/attempts/${string}`];
+export declare const getGetAttemptQueryKey: (id: string) => readonly [`/attempts/${string}`];
 export declare const getGetAttemptQueryOptions: <TData = Awaited<ReturnType<typeof getAttempt>>, TError = ErrorType<unknown>>(id: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getAttempt>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -556,7 +556,7 @@ export declare const getGetQuizAnalyticsUrl: (quizId: string) => string;
  * @summary Statistiques d'un quiz
  */
 export declare const getQuizAnalytics: (quizId: string, options?: Parameters<typeof customFetch>[1]) => Promise<QuizAnalytics>;
-export declare const getGetQuizAnalyticsQueryKey: (quizId: string) => readonly [`/api/analytics/quiz/${string}`];
+export declare const getGetQuizAnalyticsQueryKey: (quizId: string) => readonly [`/analytics/quiz/${string}`];
 export declare const getGetQuizAnalyticsQueryOptions: <TData = Awaited<ReturnType<typeof getQuizAnalytics>>, TError = ErrorType<unknown>>(quizId: string, options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getQuizAnalytics>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;
@@ -579,7 +579,7 @@ export declare const getGetStudentDashboardUrl: () => string;
  * @summary Tableau de bord étudiant
  */
 export declare const getStudentDashboard: (options?: Parameters<typeof customFetch>[1]) => Promise<StudentDashboard>;
-export declare const getGetStudentDashboardQueryKey: () => readonly ["/api/analytics/student"];
+export declare const getGetStudentDashboardQueryKey: () => readonly ["/analytics/student"];
 export declare const getGetStudentDashboardQueryOptions: <TData = Awaited<ReturnType<typeof getStudentDashboard>>, TError = ErrorType<unknown>>(options?: {
     query?: UseQueryOptions<Awaited<ReturnType<typeof getStudentDashboard>>, TError, TData>;
     request?: SecondParameter<typeof customFetch>;

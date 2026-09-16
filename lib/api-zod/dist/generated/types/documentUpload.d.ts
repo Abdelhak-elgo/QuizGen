@@ -5,7 +5,7 @@
  * QuizGen API — Spring Boot backend (Keycloak JWT auth)
  * OpenAPI spec version: 1.0.0
  */
-export interface HealthStatus {
-    status: string;
+export interface DocumentUpload {
+    file: Blob;
 }
-//# sourceMappingURL=healthStatus.d.ts.map
+//# sourceMappingURL=documentUpload.d.ts.map
