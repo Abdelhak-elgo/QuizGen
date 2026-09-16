@@ -2,6 +2,9 @@
 .env
 !.env.example
 
+# User-provided attachments must never be committed
+attached_assets/
+
 # Maven
 backend/target/
 backend/.mvn/
