@@ -96,9 +96,9 @@ jobs:
             --network host \
             -e MINIO_ROOT_USER=minioadmin \
             -e MINIO_ROOT_PASSWORD=minioadmin \
-            minio/minio:latest server /data
+            quay.io/minio/minio:latest server /data
           echo "Attente MinIO (max 30s)..."
-          for i in $(seq 1 6); do
+          for _ in $(seq 1 6); do
             if curl -sf http://localhost:9000/minio/health/live; then
               echo "MinIO pret."
               break
@@ -106,7 +106,7 @@ jobs:
             sleep 5
           done
           docker run --rm --network host \
-            minio/mc:latest \
+            quay.io/minio/mc:latest \
             sh -c "mc alias set local http://localhost:9000 minioadmin minioadmin \
               && mc mb --ignore-existing local/documents \
               && mc mb --ignore-existing local/exports"

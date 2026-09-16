@@ -1,89 +1,96 @@
-"""Tests unitaires pour les helpers de la tâche Celery (sans exécuter Celery réellement)."""
-import pytest
+"""Tests unitaires pour les helpers du pipeline Celery."""
 
-from app.models import QuestionType
-from app.tasks import _distribute_questions, _merge_concepts, _select_best_sections
-from app.models import TextSection
-
-
-# ── _distribute_questions ─────────────────────────────────────────────────────
-
-class TestDistributeQuestions:
-    def test_equal_distribution(self):
-        types = [QuestionType.QCM, QuestionType.OUVERTE]
-        result = _distribute_questions(10, types)
-        assert result[QuestionType.QCM] == 5
-        assert result[QuestionType.OUVERTE] == 5
-
-    def test_remainder_distributed(self):
-        types = [QuestionType.QCM, QuestionType.OUVERTE, QuestionType.EXERCICE]
-        result = _distribute_questions(10, types)
-        total = sum(result.values())
-        assert total == 10
-
-    def test_single_type(self):
-        result = _distribute_questions(7, [QuestionType.QCM])
-        assert result[QuestionType.QCM] == 7
-
-    def test_empty_types(self):
-        assert _distribute_questions(10, []) == {}
-
-    def test_more_types_than_questions(self):
-        types = [QuestionType.QCM, QuestionType.OUVERTE, QuestionType.EXERCICE]
-        result = _distribute_questions(2, types)
-        total = sum(result.values())
-        assert total == 2
+from app.bloom_classifier import BloomClassification, BloomLevel
+from app.models import Difficulty, QuestionType, TextSection
+from app.semantic_chunker import SemanticChunk
+from app.tasks import _plan_question_distribution, _sections_to_chunks
 
 
-# ── _select_best_sections ─────────────────────────────────────────────────────
+def _chunk(words: int = 100, coherence: float = 0.8) -> SemanticChunk:
+    text = " ".join(f"mot{i}" for i in range(words))
+    return SemanticChunk(
+        text=text,
+        sentences=[text],
+        start_sentence=0,
+        end_sentence=1,
+        coherence_score=coherence,
+        topic_keywords=["concept"],
+    )
 
-class TestSelectBestSections:
-    def _make_section(self, text: str, page: int = 1) -> TextSection:
-        return TextSection(page=page, text=text, tokens=len(text.split()))
 
-    def test_returns_n_sections(self):
-        sections = [self._make_section(f"Section {i}") for i in range(10)]
-        concepts = {i: ["concept"] * i for i in range(10)}  # Section 9 a le plus de concepts
-        result = _select_best_sections(sections, concepts, n=5)
-        assert len(result) == 5
+def _bloom(question_type: QuestionType, confidence: float = 0.9) -> BloomClassification:
+    return BloomClassification(
+        level=BloomLevel.COMPREHENSION,
+        confidence=confidence,
+        detected_markers=[],
+        question_type_hint=question_type.value,
+        difficulty_hint=Difficulty.MOYEN.value,
+        prompt_directive="Expliquer le concept.",
+    )
 
-    def test_selects_by_concept_count(self):
+
+class TestSectionsToChunks:
+    def test_converts_only_substantial_sections(self):
+        long_text = " ".join(["contenu"] * 90)
         sections = [
-            self._make_section("Section pauvre en concepts."),
-            self._make_section("Section riche en concepts et en contenu informatif."),
+            TextSection(page=1, text=long_text, tokens=90),
+            TextSection(page=2, text="trop court", tokens=2),
         ]
-        concepts = {
-            0: ["un"],           # 1 concept
-            1: ["a", "b", "c", "d", "e"],  # 5 concepts
-        }
-        result = _select_best_sections(sections, concepts, n=1)
-        assert result[0] == sections[1]  # La section la plus riche doit être sélectionnée
 
-    def test_fewer_sections_than_n(self):
-        sections = [self._make_section("Section unique.")]
-        concepts = {0: ["concept"]}
-        result = _select_best_sections(sections, concepts, n=5)
+        result = _sections_to_chunks(sections)
+
         assert len(result) == 1
+        assert result[0].text == long_text
+        assert result[0].is_substantial is True
+
+    def test_empty_sections(self):
+        assert _sections_to_chunks([]) == []
 
 
-# ── _merge_concepts ───────────────────────────────────────────────────────────
+class TestPlanQuestionDistribution:
+    def test_empty_inputs_return_no_plan(self):
+        assert _plan_question_distribution(
+            chunks=[],
+            blooms=[],
+            nb_total=5,
+            requested_types=[QuestionType.QCM],
+            difficulty=Difficulty.MOYEN,
+        ) == []
 
-class TestMergeConcepts:
-    def test_merges_without_duplicates(self):
-        concepts = {
-            0: ["machine learning", "réseau", "données"],
-            1: ["réseau", "deep learning", "données"],  # "réseau" et "données" en commun
-        }
-        result = _merge_concepts(concepts, [0, 1])
-        assert result.count("réseau") == 1
-        assert result.count("données") == 1
-        assert "machine learning" in result
-        assert "deep learning" in result
+    def test_allocates_requested_total_with_max_two_per_chunk(self):
+        chunks = [_chunk(100), _chunk(120), _chunk(140)]
+        blooms = [_bloom(QuestionType.QCM) for _ in chunks]
 
-    def test_empty_concepts(self):
-        assert _merge_concepts({}, []) == []
+        plan = _plan_question_distribution(
+            chunks=chunks,
+            blooms=blooms,
+            nb_total=5,
+            requested_types=[QuestionType.QCM],
+            difficulty=Difficulty.MOYEN,
+        )
 
-    def test_limit_to_20(self):
-        concepts = {0: [f"concept_{i}" for i in range(30)]}
-        result = _merge_concepts(concepts, [0])
-        assert len(result) == 20
+        assert sum(item[4] for item in plan) == 5
+        assert all(item[4] <= 2 for item in plan)
+
+    def test_prefers_bloom_question_type_when_requested(self):
+        plan = _plan_question_distribution(
+            chunks=[_chunk()],
+            blooms=[_bloom(QuestionType.OUVERTE)],
+            nb_total=1,
+            requested_types=[QuestionType.QCM, QuestionType.OUVERTE],
+            difficulty=Difficulty.DIFFICILE,
+        )
+
+        assert plan[0][3] is QuestionType.OUVERTE
+        assert plan[0][5] is Difficulty.DIFFICILE
+
+    def test_falls_back_to_requested_type(self):
+        plan = _plan_question_distribution(
+            chunks=[_chunk()],
+            blooms=[_bloom(QuestionType.EXERCICE)],
+            nb_total=1,
+            requested_types=[QuestionType.QCM],
+            difficulty=Difficulty.FACILE,
+        )
+
+        assert plan[0][3] is QuestionType.QCM

@@ -299,7 +299,7 @@ class TestRagInQualityScorer:
         )
         assert len(scored) == 1
         # L'answerability est calculée sur source + rag_ctx → score >= 0
-        assert scored[0].answerability_score >= 0.0
+        assert scored[0].answerability >= 0.0
 
     def test_score_questions_works_without_rag(self):
         from app.quality_scorer import score_questions
