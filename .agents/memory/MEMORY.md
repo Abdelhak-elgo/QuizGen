@@ -1,0 +1,1 @@
+- [Secrets in Replit configuration](secrets-in-replit-config.md) — audit tracked Replit config before pushes; credentials belong only in Replit Secrets.
