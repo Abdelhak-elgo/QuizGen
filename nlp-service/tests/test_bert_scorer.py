@@ -104,21 +104,8 @@ def test_score_calls_bert_score_correctly(scorer):
     """score() doit appeler bert_score.score avec les bons arguments."""
     scorer._available = True
 
-    mock_tensor_p = MagicMock()
-    mock_tensor_p.__getitem__ = lambda self, i: MagicMock(__float__=lambda s: 0.85)
-    mock_tensor_r = MagicMock()
-    mock_tensor_r.__getitem__ = lambda self, i: MagicMock(__float__=lambda s: 0.80)
-    mock_tensor_f1 = MagicMock()
-    mock_tensor_f1.__getitem__ = lambda self, i: MagicMock(__float__=lambda s: 0.82)
-
-    # Simuler import bert_score + retour de la fonction score()
-    import torch
-    t_p  = torch.tensor([0.85])
-    t_r  = torch.tensor([0.80])
-    t_f1 = torch.tensor([0.82])
-
     fake_bert_score = types.ModuleType("bert_score")
-    fake_bert_score.score = MagicMock(return_value=(t_p, t_r, t_f1))
+    fake_bert_score.score = MagicMock(return_value=([0.85], [0.80], [0.82]))
 
     with patch.dict(sys.modules, {"bert_score": fake_bert_score}):
         result = scorer.score("ma réponse", "réponse attendue")

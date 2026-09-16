@@ -5,8 +5,8 @@ import unittest.mock as mock
 import pytest
 
 from app.models import Difficulty, GeneratedQuestion, QuestionType
+from app.chain_of_thought import build_cot_prompt
 from app.llm_client import (
-    _build_prompt,
     _extract_json_from_text,
     _parse_questions,
     generate_questions,
@@ -46,7 +46,7 @@ class TestExtractJsonFromText:
 
 class TestBuildPrompt:
     def test_qcm_prompt_contains_keywords(self):
-        prompt = _build_prompt(
+        prompt = build_cot_prompt(
             QuestionType.QCM,
             context="Texte sur l'IA",
             keywords=["machine learning", "réseau de neurones"],
@@ -58,7 +58,7 @@ class TestBuildPrompt:
         assert "3" in prompt
 
     def test_ouverte_prompt_structure(self):
-        prompt = _build_prompt(
+        prompt = build_cot_prompt(
             QuestionType.OUVERTE,
             context="Texte source",
             keywords=["concept clé"],
@@ -69,16 +69,15 @@ class TestBuildPrompt:
         assert "DIFFICILE" in prompt
 
     def test_context_truncated_to_3000_chars(self):
-        long_context = "x" * 5000
-        prompt = _build_prompt(
+        long_context = " ".join(["contexte"] * 5000)
+        prompt = build_cot_prompt(
             QuestionType.QCM,
             context=long_context,
             keywords=[],
             nb=1,
             difficulty=Difficulty.FACILE,
         )
-        # Le contexte dans le prompt ne doit pas dépasser 3000 chars
-        assert "x" * 3001 not in prompt
+        assert prompt.count("contexte") <= 300
 
 
 # ── Parse questions ───────────────────────────────────────────────────────────

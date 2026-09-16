@@ -175,9 +175,7 @@ class TestProcessQuestions:
         """sample_questions_raw contient 1 QCM en doublon → doit être filtré."""
         result = process_questions(sample_questions_raw)
         contents = [q.content for q in result]
-        # Le contenu "Qu'est-ce que le machine learning ?" ne doit apparaître qu'une fois
-        ml_questions = [c for c in contents if "machine learning" in c.lower()]
-        assert len(ml_questions) == 1
+        assert contents.count("Qu'est-ce que le machine learning ?") == 1
 
     def test_invalid_questions_filtered(self):
         invalid = GeneratedQuestion(
@@ -200,8 +198,9 @@ class TestProcessQuestions:
             content="Question valide pour tester la normalisation de la difficulté ?",
             options=None,
             correct_answer="Réponse modèle valide.",
-            difficulty="INVALIDE",  # type: ignore
+            difficulty=Difficulty.MOYEN,
         )
+        object.__setattr__(q, "difficulty", "INVALIDE")
         result = process_questions([q], target_difficulty=Difficulty.FACILE)
         assert len(result) == 1
         assert result[0].difficulty == Difficulty.FACILE

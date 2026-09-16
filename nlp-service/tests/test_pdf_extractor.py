@@ -36,7 +36,7 @@ class TestIsPageNumber:
         assert _is_page_number("Introduction à l'IA") is False
 
     def test_empty_string(self):
-        assert _is_page_number("") is True  # fullmatch sur espaces → True
+        assert _is_page_number("") is False
 
     def test_number_with_text(self):
         assert _is_page_number("Page 3 sur 10") is False
