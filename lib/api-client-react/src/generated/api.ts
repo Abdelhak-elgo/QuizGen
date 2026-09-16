@@ -80,7 +80,7 @@ export const getHealthCheckUrl = () => {
 
 
 
-  return `/api/healthz`
+  return `/healthz`
 }
 
 /**
@@ -103,7 +103,7 @@ export const healthCheck = async ( options?: Parameters<typeof customFetch>[1]):
 
 export const getHealthCheckQueryKey = () => {
     return [
-    `/api/healthz`
+    `/healthz`
     ] as const;
     }
 
@@ -157,7 +157,7 @@ export const getSyncUserUrl = () => {
 
 
 
-  return `/api/users/sync`
+  return `/users/sync`
 }
 
 /**
@@ -228,7 +228,7 @@ export const getGetMeUrl = () => {
 
 
 
-  return `/api/users/me`
+  return `/users/me`
 }
 
 /**
@@ -251,7 +251,7 @@ export const getMe = async ( options?: Parameters<typeof customFetch>[1]): Promi
 
 export const getGetMeQueryKey = () => {
     return [
-    `/api/users/me`
+    `/users/me`
     ] as const;
     }
 
@@ -312,7 +312,7 @@ export const getListUsersUrl = (params?: ListUsersParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/users?${stringifiedParams}` : `/api/users`
+  return stringifiedParams.length > 0 ? `/users?${stringifiedParams}` : `/users`
 }
 
 /**
@@ -335,7 +335,7 @@ export const listUsers = async (params?: ListUsersParams, options?: Parameters<t
 
 export const getListUsersQueryKey = (params?: ListUsersParams,) => {
     return [
-    `/api/users`, ...(params ? [params] : [])
+    `/users`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -396,7 +396,7 @@ export const getListDocumentsUrl = (params?: ListDocumentsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/documents?${stringifiedParams}` : `/api/documents`
+  return stringifiedParams.length > 0 ? `/documents?${stringifiedParams}` : `/documents`
 }
 
 /**
@@ -419,7 +419,7 @@ export const listDocuments = async (params?: ListDocumentsParams, options?: Para
 
 export const getListDocumentsQueryKey = (params?: ListDocumentsParams,) => {
     return [
-    `/api/documents`, ...(params ? [params] : [])
+    `/documents`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -473,7 +473,7 @@ export const getUploadDocumentUrl = () => {
 
 
 
-  return `/api/documents/upload`
+  return `/documents/upload`
 }
 
 /**
@@ -546,7 +546,7 @@ export const getGetDocumentUrl = (id: string,) => {
 
 
 
-  return `/api/documents/${id}`
+  return `/documents/${id}`
 }
 
 /**
@@ -569,7 +569,7 @@ export const getDocument = async (id: string, options?: Parameters<typeof custom
 
 export const getGetDocumentQueryKey = (id: string,) => {
     return [
-    `/api/documents/${id}`
+    `/documents/${id}`
     ] as const;
     }
 
@@ -623,7 +623,7 @@ export const getDeleteDocumentUrl = (id: string,) => {
 
 
 
-  return `/api/documents/${id}`
+  return `/documents/${id}`
 }
 
 /**
@@ -694,7 +694,7 @@ export const getGetDocumentDownloadUrlUrl = (id: string,) => {
 
 
 
-  return `/api/documents/${id}/download-url`
+  return `/documents/${id}/download-url`
 }
 
 /**
@@ -717,7 +717,7 @@ export const getDocumentDownloadUrl = async (id: string, options?: Parameters<ty
 
 export const getGetDocumentDownloadUrlQueryKey = (id: string,) => {
     return [
-    `/api/documents/${id}/download-url`
+    `/documents/${id}/download-url`
     ] as const;
     }
 
@@ -778,7 +778,7 @@ export const getListQuizzesUrl = (params?: ListQuizzesParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/quizzes?${stringifiedParams}` : `/api/quizzes`
+  return stringifiedParams.length > 0 ? `/quizzes?${stringifiedParams}` : `/quizzes`
 }
 
 /**
@@ -801,7 +801,7 @@ export const listQuizzes = async (params?: ListQuizzesParams, options?: Paramete
 
 export const getListQuizzesQueryKey = (params?: ListQuizzesParams,) => {
     return [
-    `/api/quizzes`, ...(params ? [params] : [])
+    `/quizzes`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -855,7 +855,7 @@ export const getCreateQuizUrl = () => {
 
 
 
-  return `/api/quizzes`
+  return `/quizzes`
 }
 
 /**
@@ -926,7 +926,7 @@ export const getGetQuizUrl = (id: string,) => {
 
 
 
-  return `/api/quizzes/${id}`
+  return `/quizzes/${id}`
 }
 
 /**
@@ -949,7 +949,7 @@ export const getQuiz = async (id: string, options?: Parameters<typeof customFetc
 
 export const getGetQuizQueryKey = (id: string,) => {
     return [
-    `/api/quizzes/${id}`
+    `/quizzes/${id}`
     ] as const;
     }
 
@@ -1003,7 +1003,7 @@ export const getDeleteQuizUrl = (id: string,) => {
 
 
 
-  return `/api/quizzes/${id}`
+  return `/quizzes/${id}`
 }
 
 /**
@@ -1074,7 +1074,7 @@ export const getUpdateQuizQuestionsUrl = (id: string,) => {
 
 
 
-  return `/api/quizzes/${id}/questions`
+  return `/quizzes/${id}/questions`
 }
 
 /**
@@ -1153,7 +1153,7 @@ export const getListSessionsUrl = (params?: ListSessionsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/sessions?${stringifiedParams}` : `/api/sessions`
+  return stringifiedParams.length > 0 ? `/sessions?${stringifiedParams}` : `/sessions`
 }
 
 /**
@@ -1176,7 +1176,7 @@ export const listSessions = async (params?: ListSessionsParams, options?: Parame
 
 export const getListSessionsQueryKey = (params?: ListSessionsParams,) => {
     return [
-    `/api/sessions`, ...(params ? [params] : [])
+    `/sessions`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -1230,7 +1230,7 @@ export const getCreateSessionUrl = () => {
 
 
 
-  return `/api/sessions`
+  return `/sessions`
 }
 
 /**
@@ -1301,7 +1301,7 @@ export const getGetSessionUrl = (id: string,) => {
 
 
 
-  return `/api/sessions/${id}`
+  return `/sessions/${id}`
 }
 
 /**
@@ -1324,7 +1324,7 @@ export const getSession = async (id: string, options?: Parameters<typeof customF
 
 export const getGetSessionQueryKey = (id: string,) => {
     return [
-    `/api/sessions/${id}`
+    `/sessions/${id}`
     ] as const;
     }
 
@@ -1378,7 +1378,7 @@ export const getJoinSessionUrl = (id: string,) => {
 
 
 
-  return `/api/sessions/${id}/join`
+  return `/sessions/${id}/join`
 }
 
 /**
@@ -1450,7 +1450,7 @@ export const getCancelSessionUrl = (id: string,) => {
 
 
 
-  return `/api/sessions/${id}/cancel`
+  return `/sessions/${id}/cancel`
 }
 
 /**
@@ -1528,7 +1528,7 @@ export const getListMyAttemptsUrl = (params?: ListMyAttemptsParams,) => {
 
   const stringifiedParams = normalizedParams.toString();
 
-  return stringifiedParams.length > 0 ? `/api/attempts/my?${stringifiedParams}` : `/api/attempts/my`
+  return stringifiedParams.length > 0 ? `/attempts/my?${stringifiedParams}` : `/attempts/my`
 }
 
 /**
@@ -1551,7 +1551,7 @@ export const listMyAttempts = async (params?: ListMyAttemptsParams, options?: Pa
 
 export const getListMyAttemptsQueryKey = (params?: ListMyAttemptsParams,) => {
     return [
-    `/api/attempts/my`, ...(params ? [params] : [])
+    `/attempts/my`, ...(params ? [params] : [])
     ] as const;
     }
 
@@ -1605,7 +1605,7 @@ export const getGetAttemptUrl = (id: string,) => {
 
 
 
-  return `/api/attempts/${id}`
+  return `/attempts/${id}`
 }
 
 /**
@@ -1628,7 +1628,7 @@ export const getAttempt = async (id: string, options?: Parameters<typeof customF
 
 export const getGetAttemptQueryKey = (id: string,) => {
     return [
-    `/api/attempts/${id}`
+    `/attempts/${id}`
     ] as const;
     }
 
@@ -1682,7 +1682,7 @@ export const getSubmitAttemptUrl = (id: string,) => {
 
 
 
-  return `/api/attempts/${id}/submit`
+  return `/attempts/${id}/submit`
 }
 
 /**
@@ -1754,7 +1754,7 @@ export const getGetQuizAnalyticsUrl = (quizId: string,) => {
 
 
 
-  return `/api/analytics/quiz/${quizId}`
+  return `/analytics/quiz/${quizId}`
 }
 
 /**
@@ -1777,7 +1777,7 @@ export const getQuizAnalytics = async (quizId: string, options?: Parameters<type
 
 export const getGetQuizAnalyticsQueryKey = (quizId: string,) => {
     return [
-    `/api/analytics/quiz/${quizId}`
+    `/analytics/quiz/${quizId}`
     ] as const;
     }
 
@@ -1831,7 +1831,7 @@ export const getGetStudentDashboardUrl = () => {
 
 
 
-  return `/api/analytics/student`
+  return `/analytics/student`
 }
 
 /**
@@ -1854,7 +1854,7 @@ export const getStudentDashboard = async ( options?: Parameters<typeof customFet
 
 export const getGetStudentDashboardQueryKey = () => {
     return [
-    `/api/analytics/student`
+    `/analytics/student`
     ] as const;
     }
 
