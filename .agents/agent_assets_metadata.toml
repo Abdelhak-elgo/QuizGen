@@ -1,0 +1,16 @@
+uploads = []
+generated = []
+
+[[outputs]]
+id = "gwPzQ9DfZ0xCFvXsYti1q"
+uri = "file://exports/Rapport_PFE_QuizGen_reequilibre_max_40_pages.docx"
+type = "word_document"
+title = "Rapport PFE QuizGen — version rééquilibrée"
+description = "Version académique condensée pour rester sous 40 pages, avec six chapitres, six figures, bibliographie et deux annexes courtes."
+logical_id = "8a3c5c48-97df-4a83-ae17-a66a1ea9bf73"
+content_hash = "sha256:242aa4ce1e7483693faeec860811cd773a37b73b28cd55a2246c3c810c07102b"
+size = 985265
+mtime_ms = 1789591537565
+storage_uri = "gcs://replit-rams-assets-riker/rams/assets/repl:4beac0fb-011e-4fd2-840a-8aacb9b7c75b/8a3c5c48-97df-4a83-ae17-a66a1ea9bf73/2329305a-61ea-476f-b56a-5996468350b4"
+storage_version_token = "1789591542668762"
+content_type = "application/vnd.openxmlformats-officedocument.wordprocessingml.document"

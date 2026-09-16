@@ -5,6 +5,9 @@
 # User-provided attachments must never be committed
 attached_assets/
 
+# Generated reports are local deliverables and must never be committed
+exports/*.docx
+
 # Maven
 backend/target/
 backend/.mvn/
