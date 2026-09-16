@@ -14,7 +14,6 @@ import org.keycloak.representations.idm.CredentialRepresentation;
 import org.keycloak.representations.idm.RoleRepresentation;
 import org.keycloak.representations.idm.UserRepresentation;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -28,7 +27,6 @@ public class AuthService {
 
     private final UserRepository userRepository;
     private final Keycloak keycloak;
-    private final PasswordEncoder passwordEncoder;
 
     @Value("${keycloak.realm}")
     private String realm;
