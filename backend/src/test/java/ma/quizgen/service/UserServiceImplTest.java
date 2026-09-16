@@ -40,10 +40,10 @@ class UserServiceImplTest {
 
     @BeforeEach
     void setupCurrentUser() {
-        when(currentUser.getKeycloakId()).thenReturn(KEYCLOAK_ID);
-        when(currentUser.getEmail()).thenReturn(EMAIL);
-        when(currentUser.getFirstName()).thenReturn(FIRST_NAME);
-        when(currentUser.getLastName()).thenReturn(LAST_NAME);
+        lenient().when(currentUser.getKeycloakId()).thenReturn(KEYCLOAK_ID);
+        lenient().when(currentUser.getEmail()).thenReturn(EMAIL);
+        lenient().when(currentUser.getFirstName()).thenReturn(FIRST_NAME);
+        lenient().when(currentUser.getLastName()).thenReturn(LAST_NAME);
     }
 
     // ── syncCurrentUser ───────────────────────────────────────────────────────

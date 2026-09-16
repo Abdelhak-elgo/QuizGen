@@ -53,8 +53,8 @@ class DocumentServiceImplTest {
             .role(Role.ENSEIGNANT)
             .build();
 
-        when(currentUser.getKeycloakId()).thenReturn(KC_ID);
-        when(userRepository.findByKeycloakId(KC_ID)).thenReturn(Optional.of(teacher));
+        lenient().when(currentUser.getKeycloakId()).thenReturn(KC_ID);
+        lenient().when(userRepository.findByKeycloakId(KC_ID)).thenReturn(Optional.of(teacher));
     }
 
     // ── uploadDocument ────────────────────────────────────────────────────────

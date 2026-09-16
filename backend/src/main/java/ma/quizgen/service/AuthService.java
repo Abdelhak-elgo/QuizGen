@@ -91,7 +91,7 @@ public class AuthService {
                 .firstName(request.getFirstName())
                 .lastName(request.getLastName())
                 .role(role)
-                .active(true)
+                .isActive(true)
                 .build();
 
         user = userRepository.save(user);
@@ -110,7 +110,7 @@ public class AuthService {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("Email ou mot de passe incorrect"));
 
-        if (!user.getActive()) {
+        if (!user.getIsActive()) {
             throw new IllegalArgumentException("Ce compte a été désactivé");
         }
 
