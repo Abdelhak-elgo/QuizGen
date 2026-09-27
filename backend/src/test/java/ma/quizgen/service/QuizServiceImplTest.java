@@ -62,7 +62,7 @@ class QuizServiceImplTest {
     // ── create ────────────────────────────────────────────────────────────────
 
     @Test
-    @DisplayName("create : génère un quiz avec questions NLP")
+    @DisplayName("create : soumet la génération NLP en asynchrone et retourne immédiatement")
     void create_success() {
         QuizCreateRequest req = new QuizCreateRequest(
             document.getId(), "Quiz IA", "Description", Difficulty.MOYEN, 5, null);
@@ -77,30 +77,39 @@ class QuizServiceImplTest {
             .quizStatus(QuizStatus.DRAFT)
             .build();
 
-        NlpTaskStatus nlpResult = new NlpTaskStatus(
-            "task-abc", "SUCCESS", 100,
-            List.of(Map.of(
-                "type", "QCM",
-                "content", "Qu'est-ce que l'IA ?",
-                "options", List.of("Machine learning", "Base de données", "Langage", "OS"),
-                "correct_answer", "Machine learning",
-                "explanation", "Explication",
-                "difficulty", "MOYEN",
-                "keywords", List.of("IA")
-            )),
-            null
-        );
-
         when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
         when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(document.getId(), QuizStatus.DRAFT))
+            .thenReturn(false);
         when(quizRepository.save(any())).thenReturn(savedQuiz);
-        when(nlpClient.submitAndWait(any())).thenReturn(nlpResult);
+        when(nlpClient.submitGeneration(any())).thenReturn("task-abc");
 
         QuizDto result = quizService.create(req, TEACHER_KC_ID);
 
         assertThat(result).isNotNull();
         assertThat(result.title()).isEqualTo("Quiz IA");
-        verify(nlpClient).submitAndWait(any(NlpGenerateRequest.class));
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.DRAFT);
+        verify(nlpClient).submitGeneration(any(NlpGenerateRequest.class));
+        verify(nlpClient, never()).submitAndWait(any());
+    }
+
+    @Test
+    @DisplayName("create : lève 409 si une génération est déjà en cours pour ce document")
+    void create_conflictWhenAlreadyGenerating() {
+        QuizCreateRequest req = new QuizCreateRequest(
+            document.getId(), "Quiz IA", null, Difficulty.MOYEN, 5, null);
+
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(document.getId(), QuizStatus.DRAFT))
+            .thenReturn(true);
+
+        assertThatThrownBy(() -> quizService.create(req, TEACHER_KC_ID))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("déjà en cours");
+
+        verifyNoInteractions(nlpClient);
+        verify(quizRepository, never()).save(any());
     }
 
     @Test
@@ -129,7 +138,7 @@ class QuizServiceImplTest {
     }
 
     @Test
-    @DisplayName("create : lève 503 si le microservice NLP échoue")
+    @DisplayName("create : lève 503 si la soumission au microservice NLP échoue")
     void create_nlpFailure() {
         QuizCreateRequest req = new QuizCreateRequest(
             document.getId(), "Quiz", null, Difficulty.MOYEN, 5, null);
@@ -141,12 +150,84 @@ class QuizServiceImplTest {
 
         when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
         when(documentRepository.findById(document.getId())).thenReturn(Optional.of(document));
+        when(quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(document.getId(), QuizStatus.DRAFT))
+            .thenReturn(false);
         when(quizRepository.save(any())).thenReturn(draft);
-        when(nlpClient.submitAndWait(any())).thenThrow(new IllegalStateException("Timeout NLP"));
+        when(nlpClient.submitGeneration(any())).thenThrow(new IllegalStateException("Microservice injoignable"));
 
         assertThatThrownBy(() -> quizService.create(req, TEACHER_KC_ID))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("NLP");
+    }
+
+    // ── getById (polling / avancement NLP) ───────────────────────────────────────
+
+    @Test
+    @DisplayName("getById : complète le quiz quand la tâche NLP est SUCCESS")
+    void getById_completesQuiz_onNlpSuccess() {
+        Quiz quiz = Quiz.builder()
+            .id(UUID.randomUUID()).document(document).teacher(teacher)
+            .title("Quiz IA").difficulty(Difficulty.MOYEN).nbQuestions(1)
+            .quizStatus(QuizStatus.DRAFT).nlpTaskId("task-abc").build();
+
+        NlpTaskStatus success = new NlpTaskStatus(
+            "task-abc", "SUCCESS", 100,
+            List.of(Map.of(
+                "type", "QCM",
+                "content", "Qu'est-ce que l'IA ?",
+                "options", List.of("Machine learning", "Base de données", "Langage", "OS"),
+                "correct_answer", "Machine learning",
+                "explanation", "Explication",
+                "difficulty", "MOYEN",
+                "keywords", List.of("IA")
+            )),
+            null
+        );
+
+        when(quizRepository.findByIdWithQuestions(quiz.getId())).thenReturn(Optional.of(quiz));
+        when(nlpClient.pollStatus("task-abc")).thenReturn(success);
+        when(quizRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuizDto result = quizService.getById(quiz.getId(), TEACHER_KC_ID);
+
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.REVIEWING);
+        assertThat(result.questions()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("getById : libère le document (nlpTaskId=null) quand la tâche NLP échoue")
+    void getById_clearsTaskId_onNlpFailure() {
+        Quiz quiz = Quiz.builder()
+            .id(UUID.randomUUID()).document(document).teacher(teacher)
+            .title("Quiz IA").difficulty(Difficulty.MOYEN).nbQuestions(1)
+            .quizStatus(QuizStatus.DRAFT).nlpTaskId("task-abc").build();
+
+        NlpTaskStatus failure = new NlpTaskStatus("task-abc", "FAILURE", null, null, "Timeout");
+
+        when(quizRepository.findByIdWithQuestions(quiz.getId())).thenReturn(Optional.of(quiz));
+        when(nlpClient.pollStatus("task-abc")).thenReturn(failure);
+        when(quizRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuizDto result = quizService.getById(quiz.getId(), TEACHER_KC_ID);
+
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.DRAFT);
+        assertThat(result.nlpTaskId()).isNull();
+    }
+
+    @Test
+    @DisplayName("getById : ne poll pas le microservice NLP si le quiz n'est plus en DRAFT")
+    void getById_skipsPolling_whenNotDraft() {
+        Quiz quiz = Quiz.builder()
+            .id(UUID.randomUUID()).document(document).teacher(teacher)
+            .title("Quiz IA").difficulty(Difficulty.MOYEN).nbQuestions(1)
+            .quizStatus(QuizStatus.PUBLISHED).build();
+
+        when(quizRepository.findByIdWithQuestions(quiz.getId())).thenReturn(Optional.of(quiz));
+
+        QuizDto result = quizService.getById(quiz.getId(), TEACHER_KC_ID);
+
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.PUBLISHED);
+        verifyNoInteractions(nlpClient);
     }
 
     // ── updateQuestions ───────────────────────────────────────────────────────

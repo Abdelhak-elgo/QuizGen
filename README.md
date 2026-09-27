@@ -1,6 +1,6 @@
 # QuizGen 🎓
 
-**Génération automatique de quiz pédagogiques par IA**  
+**Génération automatique de quiz pédagogiques par IA**\
 PFE Master MIAGE 2024/2025 — Université Mohammed V
 
 [![CI](https://github.com/Abdelhak-elgo/QuizGen/actions/workflows/ci.yml/badge.svg)](https://github.com/Abdelhak-elgo/QuizGen/actions/workflows/ci.yml)
@@ -9,33 +9,34 @@ PFE Master MIAGE 2024/2025 — Université Mohammed V
 [![Spring Boot](https://img.shields.io/badge/Spring%20Boot-3.3-brightgreen)](https://spring.io/projects/spring-boot)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115-009688)](https://fastapi.tiangolo.com)
 
----
+***
 
 ## 🏗️ Architecture
 
-| Couche | Technologie | Port |
-|--------|-------------|------|
-| Frontend | React 18 + TypeScript + TailwindCSS | 3000 |
-| Backend API | Spring Boot 3.3 + Java 21 | 8080 |
-| Microservice NLP | FastAPI + Python 3.11 | 8000 |
-| IAM | Keycloak 25.0 | 8180 |
-| Base de données | PostgreSQL 16 | 5432 |
-| Cache / Broker | Redis 7 | 6379 |
-| Stockage PDF | MinIO | 9000 / 9001 |
-| LLM | Ollama + Mistral | 11434 |
+| Couche           | Technologie                         | Port        |
+| ---------------- | ----------------------------------- | ----------- |
+| Frontend         | React 18 + TypeScript + TailwindCSS | 3000        |
+| Backend API      | Spring Boot 3.3 + Java 21           | 8080        |
+| Microservice NLP | FastAPI + Python 3.11               | 8000        |
+| IAM              | Keycloak 25.0                       | 8180        |
+| Base de données  | PostgreSQL 16                       | 5432        |
+| Cache / Broker   | Redis 7                             | 6379        |
+| Stockage PDF     | MinIO                               | 9000 / 9001 |
+| LLM              | Ollama + Mistral                    | 11434       |
 
----
+***
 
 ## 🚀 Démarrage rapide
 
 ### Prérequis
-- Docker Desktop ≥ 24 + Docker Compose v2
-- 8 Go RAM minimum (Mistral nécessite ~4 Go)
-- Git
+
+* Docker Desktop ≥ 24 + Docker Compose v2
+* 8 Go RAM minimum (Mistral nécessite \~4 Go)
+* Git
 
 ### 1. Cloner et configurer
 
-```bash
+```Shell
 git clone https://github.com/Abdelhak-elgo/QuizGen.git
 cd QuizGen
 cp .env.example .env
@@ -44,47 +45,47 @@ cp .env.example .env
 
 ### 2. Lancer tous les services
 
-```bash
+```Shell
 docker compose up -d --build
 ```
 
 Vérifier que tout est sain :
 
-```bash
+```Shell
 docker compose ps
 # Tous les services doivent afficher "healthy" ou "running"
 ```
 
-### 3. Télécharger le modèle Mistral (~4 Go)
+### 3. Télécharger le modèle Mistral (\~4 Go)
 
-```bash
+```Shell
 chmod +x scripts/setup-ollama.sh
 ./scripts/setup-ollama.sh
 ```
 
 ### 4. Accès aux services
 
-| Service | URL | Credentials |
-|---------|-----|-------------|
-| Frontend QuizGen | http://localhost:3000 | Comptes de test ci-dessous |
-| Spring Boot API | http://localhost:8080/api/v1 | JWT Keycloak |
-| Swagger UI | http://localhost:8080/api/v1/swagger-ui.html | — |
-| Keycloak Console | http://localhost:8180 | admin / (KC_ADMIN_PASS dans .env) |
-| MinIO Console | http://localhost:9001 | minioadmin / (MINIO_SECRET_KEY dans .env) |
-| FastAPI NLP docs | http://localhost:8000/docs | — |
+| Service          | URL                                            | Credentials                                 |
+| ---------------- | ---------------------------------------------- | ------------------------------------------- |
+| Frontend QuizGen | <http://localhost:3000>                        | Comptes de test ci-dessous                  |
+| Spring Boot API  | <http://localhost:8080/api/v1>                 | JWT Keycloak                                |
+| Swagger UI       | <http://localhost:8080/api/v1/swagger-ui.html> | —                                           |
+| Keycloak Console | <http://localhost:8180>                        | admin / (KC\_ADMIN\_PASS dans .env)         |
+| MinIO Console    | <http://localhost:9001>                        | minioadmin / (MINIO\_SECRET\_KEY dans .env) |
+| FastAPI NLP docs | <http://localhost:8000/docs>                   | —                                           |
 
----
+***
 
 ## 🔐 Authentification (Keycloak)
 
-**Realm** : `quizgen`  
+**Realm** : `quizgen`\
 **Utilisateurs de test** :
 
-| Email | Mot de passe | Rôle |
-|-------|--------------|------|
-| admin@quizgen.ma | admin123 | ADMIN |
-| prof.ahmed@univ.ma | prof123 | ENSEIGNANT |
-| sara.elamrani@univ.ma | etud123 | ETUDIANT |
+| Email                                                                                                                          | Mot de passe | Rôle       |
+| ------------------------------------------------------------------------------------------------------------------------------ | ------------ | ---------- |
+| <admin@quizgen.ma>                                                                                                             | admin123     | ADMIN      |
+| [teacher@quizgen.ma](http://localhost:8180/admin/master/console/#/quizgen/users/b470952a-0a46-4bcc-b9a6-9d877dc70941/settings) | teacher123   | ENSEIGNANT |
+| [student@quizgen.ma](http://localhost:8180/admin/master/console/#/quizgen/users/c7b2661b-1b87-4005-946e-cef76171a481/settings) | student123   | ETUDIANT   |
 
 Après connexion avec le compte administrateur, l'interface d'administration
 est disponible sur `http://localhost:3000/admin`. Elle permet actuellement de
@@ -93,7 +94,7 @@ l'activation et la suppression nécessitent encore des endpoints backend.
 
 ### Obtenir un token JWT (curl)
 
-```bash
+```Shell
 curl -s -X POST http://localhost:8180/realms/quizgen/protocol/openid-connect/token \
   -d "grant_type=password" \
   -d "client_id=quizgen-frontend" \
@@ -101,7 +102,7 @@ curl -s -X POST http://localhost:8180/realms/quizgen/protocol/openid-connect/tok
   -d "password=prof123" | jq -r .access_token
 ```
 
----
+***
 
 ## 🧪 Tests avec Postman
 
@@ -149,7 +150,7 @@ Exécuter les requêtes dans cet ordre :
 
 ### Tests automatisés (Collection Runner)
 
-```bash
+```Shell
 # Via Newman (CLI Postman)
 npm install -g newman
 newman run postman/quizgen.postman_collection.json \
@@ -158,7 +159,7 @@ newman run postman/quizgen.postman_collection.json \
   --reporter-json-export postman/results.json
 ```
 
----
+***
 
 ## 📋 API Endpoints
 
@@ -181,7 +182,7 @@ GET    /api/v1/documents/{id}/download-url  # URL présignée MinIO (1h)
 DELETE /api/v1/documents/{id}               # Supprimer
 ```
 
----
+***
 
 ## 🔄 CI/CD
 
@@ -189,29 +190,29 @@ DELETE /api/v1/documents/{id}               # Supprimer
 
 Le pipeline CI s'exécute automatiquement sur chaque push vers `main` ou `develop` :
 
-| Job | Description | Déclencheur |
-|-----|-------------|-------------|
-| `build` | Compile + tests unitaires Maven + rapport Surefire | push / PR |
-| `sonar` | Analyse SonarQube (Quality Gate) | push main/develop |
-| `docker-backend` | Build + push image Spring Boot → GHCR | push |
-| `docker-nlp` | Build + push image FastAPI → GHCR | push |
+| Job              | Description                                        | Déclencheur       |
+| ---------------- | -------------------------------------------------- | ----------------- |
+| `build`          | Compile + tests unitaires Maven + rapport Surefire | push / PR         |
+| `sonar`          | Analyse SonarQube (Quality Gate)                   | push main/develop |
+| `docker-backend` | Build + push image Spring Boot → GHCR              | push              |
+| `docker-nlp`     | Build + push image FastAPI → GHCR                  | push              |
 
 ### Secrets GitHub requis
 
 Configurer dans **Settings > Secrets and variables > Actions** :
 
-| Secret | Description |
-|--------|-------------|
-| `SONAR_TOKEN` | Token d'authentification SonarQube |
+| Secret           | Description                                                      |
+| ---------------- | ---------------------------------------------------------------- |
+| `SONAR_TOKEN`    | Token d'authentification SonarQube                               |
 | `SONAR_HOST_URL` | URL du serveur SonarQube (ex: `https://sonarqube.mondomaine.ma`) |
 
 > Les secrets `GITHUB_TOKEN` et accès GHCR sont fournis automatiquement par GitHub Actions.
 
----
+***
 
 ## 🧪 Tests
 
-```bash
+```Shell
 # Tests unitaires Spring Boot (JUnit 5 + Mockito)
 cd backend && mvn test
 
@@ -223,7 +224,7 @@ newman run postman/quizgen.postman_collection.json \
   -e postman/quizgen.postman_environment.json
 ```
 
----
+***
 
 ## 📁 Structure du projet
 
@@ -266,16 +267,17 @@ QuizGen/
 └── artifacts/frontend/         # React + Vite — application web multi-rôles
 ```
 
----
+***
 
 ## 🗺️ Plan d'implémentation
 
-| Phase | Contenu | Statut |
-|-------|---------|--------|
-| Phase 1 | Spring Boot CRUD Users + Documents + MinIO | ✅ Fait |
-| Phase 2 | CI/CD + Postman | ✅ Fait |
-| Phase 3 | FastAPI NLP : SpaCy + KeyBERT + Mistral | ✅ Fait |
-| Phase 4 | Spring Boot Quiz, Sessions, Attempts, Analytics | ✅ Fait |
-| Phase 5 | React Frontend multi-rôles | ✅ Fait |
-| Phase 6 | BERTScore + Exports SCORM/Moodle | ✅ Fait |
-| Phase 7 | Qualité + Kubernetes + Monitoring | ⏳ À faire |
+| Phase   | Contenu                                         | Statut    |
+| ------- | ----------------------------------------------- | --------- |
+| Phase 1 | Spring Boot CRUD Users + Documents + MinIO      | ✅ Fait    |
+| Phase 2 | CI/CD + Postman                                 | ✅ Fait    |
+| Phase 3 | FastAPI NLP : SpaCy + KeyBERT + Mistral         | ✅ Fait    |
+| Phase 4 | Spring Boot Quiz, Sessions, Attempts, Analytics | ✅ Fait    |
+| Phase 5 | React Frontend multi-rôles                      | ✅ Fait    |
+| Phase 6 | BERTScore + Exports SCORM/Moodle                | ✅ Fait    |
+| Phase 7 | Qualité + Kubernetes + Monitoring               | ⏳ À faire |
+

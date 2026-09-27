@@ -21,4 +21,6 @@ public interface QuizRepository extends JpaRepository<Quiz, UUID> {
     Optional<Quiz> findByIdWithQuestions(@Param("id") UUID id);
 
     boolean existsByDocument_IdAndTeacher_Id(UUID documentId, UUID teacherId);
+
+    boolean existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(UUID documentId, QuizStatus quizStatus);
 }

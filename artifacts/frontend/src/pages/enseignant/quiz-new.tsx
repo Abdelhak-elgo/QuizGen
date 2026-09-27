@@ -1,16 +1,17 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useLocation, useSearch } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import * as z from 'zod';
-import { 
-  useListDocuments, 
-  useCreateQuiz, 
-  useGetQuiz, 
+import {
+  useListDocuments,
+  useCreateQuiz,
+  useGetQuiz,
   getListQuizzesQueryKey,
   getGetQuizQueryKey,
   QuizInputDifficulty,
-  QuizInputQuestionTypesItem
+  QuizInputQuestionTypesItem,
+  ApiError
 } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EnseignantLayout } from '@/components/layout/enseignant-layout';
@@ -48,6 +49,13 @@ export default function QuizNew() {
   
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
 
+  // La génération NLP est asynchrone côté serveur (peut prendre plusieurs
+  // minutes : chargement modèle + appels LLM par segment). On limite le
+  // nombre de tentatives pour éviter un spinner infini si la génération
+  // échoue silencieusement (le quiz reste alors en DRAFT côté backend).
+  const MAX_POLL_ATTEMPTS = 200; // ~10 min à 3s d'intervalle
+  const pollAttemptsRef = useRef(0);
+
   // Poll for completion if we have an ID
   const { data: pollingQuiz } = useGetQuiz(generatingQuizId || '', {
     query: {
@@ -56,15 +64,23 @@ export default function QuizNew() {
       refetchInterval: (query) => {
         const status = query.state.data?.quizStatus;
         if (status && status !== 'DRAFT') return false;
+        pollAttemptsRef.current += 1;
+        if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) return false;
         return 3000;
       },
     }
   });
 
   useEffect(() => {
-    if (pollingQuiz && pollingQuiz.quizStatus !== 'DRAFT') {
+    if (!pollingQuiz) return;
+
+    if (pollingQuiz.quizStatus !== 'DRAFT') {
       toast.success('Génération du quiz terminée !');
       setLocation(`/enseignant/quizzes/${pollingQuiz.id}`);
+    } else if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
+      toast.error('La génération a échoué ou prend trop de temps. Veuillez réessayer.');
+      pollAttemptsRef.current = 0;
+      setGeneratingQuizId(null);
     }
   }, [pollingQuiz, setLocation]);
 
@@ -98,7 +114,11 @@ export default function QuizNew() {
       
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors de la création du quiz');
+      if (error instanceof ApiError && error.status === 409) {
+        toast.error('Une génération est déjà en cours pour ce document. Veuillez patienter.');
+      } else {
+        toast.error('Erreur lors de la création du quiz');
+      }
     }
   };
 

@@ -79,7 +79,12 @@ class DocumentServiceImplTest {
         assertThat(response.originalFilename()).isEqualTo("cours.pdf");
         assertThat(response.message()).contains("succès");
         verify(minioService).uploadFile(eq("documents"), anyString(), any(), anyString(), anyLong());
-        verify(documentRepository).save(any(Document.class));
+
+        var captor = org.mockito.ArgumentCaptor.forClass(Document.class);
+        verify(documentRepository).save(captor.capture());
+        assertThat(captor.getValue().getIsProcessed())
+            .as("un document uploadé doit être immédiatement disponible pour la génération de quiz")
+            .isTrue();
     }
 
     @Test

@@ -1,7 +1,12 @@
 """Configuration et création de l'instance Celery."""
+import logging
+
 from celery import Celery
+from celery.signals import worker_init
+
 from app.config import get_settings
 
+logger = logging.getLogger(__name__)
 settings = get_settings()
 
 celery_app = Celery(
@@ -22,3 +27,28 @@ celery_app.conf.update(
     worker_prefetch_multiplier=1,  # 1 tâche par worker (génération lourde)
     task_acks_late=True,           # Acquittement après complétion (fiabilité)
 )
+
+
+@worker_init.connect
+def preload_nlp_models(**kwargs) -> None:
+    """
+    Charge les modèles SpaCy et KeyBERT dans le processus parent, avant que
+    le pool prefork ne forke les processus worker.
+
+    Sans ça, chaque modèle est chargé paresseusement (lru_cache) au moment
+    du premier appel — c'est-à-dire à l'intérieur d'une tâche Celery, dans un
+    processus déjà forké. Conséquences :
+      - la première tâche traitée par chaque worker paie le coût de
+        chargement du modèle (plusieurs dizaines de secondes) ;
+      - avec concurrency > 1, chaque processus enfant charge sa propre copie
+        du modèle en mémoire (~450 Mo pour KeyBERT), sans partage possible.
+
+    En chargeant ici, dans le processus parent, les enfants héritent la
+    mémoire par copy-on-write au lieu de dupliquer le modèle par worker.
+    """
+    from app.nlp_pipeline import _load_keybert_model, _load_spacy_model
+
+    logger.info("Préchargement des modèles NLP avant fork des workers...")
+    _load_spacy_model()
+    _load_keybert_model()
+    logger.info("Modèles NLP prêts — fork des workers.")

@@ -60,6 +60,15 @@ public class QuizServiceImpl implements QuizService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ce document ne vous appartient pas");
         }
 
+        // Empêche de soumettre plusieurs générations NLP concurrentes pour le même
+        // document (ex: double-clic, ou nouvel essai pendant qu'une génération
+        // précédente tourne encore) — chaque tâche est coûteuse en CPU et fait
+        // concurrence aux autres sur le même worker.
+        if (quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Une génération est déjà en cours pour ce document. Veuillez patienter qu'elle se termine.");
+        }
+
         List<QuestionType> types = (request.questionTypes() != null && !request.questionTypes().isEmpty())
             ? request.questionTypes()
             : List.of(QuestionType.QCM, QuestionType.OUVERTE);
@@ -84,30 +93,67 @@ public class QuizServiceImpl implements QuizService {
             request.difficulty()
         );
 
+        // Soumission asynchrone uniquement : la génération peut prendre plusieurs
+        // minutes (chargement modèle + appels LLM par chunk). Le résultat est
+        // récupéré via le polling de GET /quizzes/{id} (voir getById), qui
+        // interroge le statut de la tâche Celery et complète le quiz dès qu'il
+        // est prêt. Bloquer la requête HTTP ici ferait attendre l'enseignant
+        // plusieurs minutes sans retour, et chaque nouvel essai soumettrait une
+        // tâche NLP redondante en plus de celle déjà en cours.
         try {
-            NlpTaskStatus result = nlpClient.submitAndWait(nlpReq);
-            quiz.setNlpTaskId(result.taskId());
-            quiz.getQuestions().addAll(mapNlpToQuestions(result.result(), quiz));
-            quiz.setQuizStatus(QuizStatus.REVIEWING);
+            String taskId = nlpClient.submitGeneration(nlpReq);
+            quiz.setNlpTaskId(taskId);
             quiz = quizRepository.save(quiz);
-            log.info("Quiz {} généré ({} questions)", quiz.getId(), quiz.getQuestions().size());
+            log.info("Quiz {} — génération NLP soumise (task_id={})", quiz.getId(), taskId);
         } catch (Exception e) {
-            log.error("Échec NLP pour quiz {}: {}", quiz.getId(), e.getMessage());
-            quiz.setQuizStatus(QuizStatus.DRAFT);
-            quizRepository.save(quiz);
+            log.error("Échec de soumission NLP pour quiz {}: {}", quiz.getId(), e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
-                "Génération NLP échouée : " + e.getMessage());
+                "Impossible de soumettre la génération NLP : " + e.getMessage());
         }
 
         return QuizDto.from(quiz);
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public QuizDto getById(UUID quizId, String requesterKeycloakId) {
         Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz introuvable"));
+
+        if (quiz.getQuizStatus() == QuizStatus.DRAFT && quiz.getNlpTaskId() != null) {
+            quiz = advanceIfNlpDone(quiz);
+        }
+
         return QuizDto.from(quiz);
+    }
+
+    /**
+     * Vérifie l'état de la tâche NLP associée à un quiz en DRAFT et le complète
+     * si la génération est terminée (succès ou échec). Appelé à chaque poll de
+     * GET /quizzes/{id} par le frontend — évite tout blocage de thread HTTP.
+     */
+    private Quiz advanceIfNlpDone(Quiz quiz) {
+        NlpTaskStatus status;
+        try {
+            status = nlpClient.pollStatus(quiz.getNlpTaskId());
+        } catch (Exception e) {
+            log.warn("Statut NLP indisponible pour quiz {} (task_id={}): {}",
+                quiz.getId(), quiz.getNlpTaskId(), e.getMessage());
+            return quiz;
+        }
+
+        if (status.isSuccess()) {
+            quiz.getQuestions().addAll(mapNlpToQuestions(status.result(), quiz));
+            quiz.setQuizStatus(QuizStatus.REVIEWING);
+            quiz = quizRepository.save(quiz);
+            log.info("Quiz {} généré ({} questions)", quiz.getId(), quiz.getQuestions().size());
+        } else if (status.isFailure()) {
+            log.error("Génération NLP échouée pour quiz {} (task_id={}): {}",
+                quiz.getId(), quiz.getNlpTaskId(), status.error());
+            quiz.setNlpTaskId(null);
+            quiz = quizRepository.save(quiz);
+        }
+        return quiz;
     }
 
     @Override

@@ -68,6 +68,7 @@ public class DocumentServiceImpl implements DocumentService {
             .objectKey(objectKey)
             .etag(etag)
             .fileSize(file.getSize())
+            .isProcessed(true)
             .build();
 
         Document saved = documentRepository.save(doc);
