@@ -10,8 +10,11 @@ import java.util.UUID;
 
 public interface QuizService {
 
-    /** Crée un quiz et déclenche la génération NLP (bloquant avec polling). */
+    /** Crée un quiz en DRAFT et soumet la génération NLP (asynchrone, suivie par getById). */
     QuizDto create(QuizCreateRequest request, String teacherKeycloakId);
+
+    /** Relance la génération d'un quiz en échec (FAILED), avec ses paramètres d'origine. */
+    QuizDto regenerate(UUID quizId, String teacherKeycloakId);
 
     QuizDto getById(UUID quizId, String requesterKeycloakId);
 

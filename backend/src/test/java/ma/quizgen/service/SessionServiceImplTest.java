@@ -1,8 +1,10 @@
 package ma.quizgen.service;
 
+import ma.quizgen.dto.AssignedSessionDto;
 import ma.quizgen.dto.AttemptDto;
 import ma.quizgen.dto.SessionCreateRequest;
 import ma.quizgen.dto.SessionDto;
+import ma.quizgen.dto.SessionParticipantDto;
 import ma.quizgen.entity.*;
 import ma.quizgen.entity.enums.*;
 import ma.quizgen.repository.*;
@@ -45,7 +47,7 @@ class SessionServiceImplTest {
         teacher = User.builder().id(UUID.randomUUID()).keycloakId(TEACHER_KC)
             .firstName("Ahmed").lastName("Prof").build();
         student = User.builder().id(UUID.randomUUID()).keycloakId(STUDENT_KC)
-            .firstName("Sara").lastName("Étudiant").build();
+            .firstName("Sara").lastName("Étudiant").role(Role.ETUDIANT).build();
 
         Document doc = Document.builder().id(UUID.randomUUID()).user(teacher)
             .bucketName("documents").objectKey("doc.pdf").build();
@@ -63,7 +65,7 @@ class SessionServiceImplTest {
     void create_scheduled() {
         LocalDateTime start = LocalDateTime.now().plusHours(1);
         LocalDateTime end   = LocalDateTime.now().plusHours(3);
-        SessionCreateRequest req = new SessionCreateRequest(publishedQuiz.getId(), start, end, "CODE123");
+        SessionCreateRequest req = new SessionCreateRequest(publishedQuiz.getId(), start, end, "CODE123", null);
 
         Session session = Session.builder()
             .id(UUID.randomUUID()).quiz(publishedQuiz).teacher(teacher)
@@ -88,6 +90,7 @@ class SessionServiceImplTest {
             publishedQuiz.getId(),
             LocalDateTime.now().plusHours(1),
             LocalDateTime.now().plusHours(3),
+            null,
             null
         );
 
@@ -106,6 +109,7 @@ class SessionServiceImplTest {
             publishedQuiz.getId(),
             LocalDateTime.now().plusHours(3),
             LocalDateTime.now().plusHours(1),  // end avant start
+            null,
             null
         );
 
@@ -154,6 +158,7 @@ class SessionServiceImplTest {
             .sessionStatus(SessionStatus.OPEN).build();
 
         when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
 
         assertThatThrownBy(() -> sessionService.join(session.getId(), "WRONG", STUDENT_KC))
             .isInstanceOf(ResponseStatusException.class)
@@ -198,5 +203,137 @@ class SessionServiceImplTest {
         assertThatThrownBy(() -> sessionService.join(closed.getId(), null, STUDENT_KC))
             .isInstanceOf(ResponseStatusException.class)
             .hasMessageContaining("terminée");
+    }
+
+    // ── participants ──────────────────────────────────────────────────────────
+
+    private Session openSessionWithCode(String code) {
+        return Session.builder()
+            .id(UUID.randomUUID()).quiz(publishedQuiz).teacher(teacher)
+            .startTime(LocalDateTime.now().minusHours(1))
+            .endTime(LocalDateTime.now().plusHours(2))
+            .accessCode(code)
+            .sessionStatus(SessionStatus.OPEN).build();
+    }
+
+    @Test
+    @DisplayName("create : assigne les étudiants demandés")
+    void create_withStudents() {
+        LocalDateTime start = LocalDateTime.now().plusHours(1);
+        SessionCreateRequest req = new SessionCreateRequest(
+            publishedQuiz.getId(), start, start.plusHours(2), null, List.of(student.getId()));
+
+        when(userRepository.findByKeycloakId(TEACHER_KC)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findById(publishedQuiz.getId())).thenReturn(Optional.of(publishedQuiz));
+        when(userRepository.findAllById(Set.of(student.getId()))).thenReturn(List.of(student));
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SessionDto result = sessionService.create(req, TEACHER_KC);
+
+        assertThat(result.participants()).extracting(SessionParticipantDto::id).containsExactly(student.getId());
+    }
+
+    @Test
+    @DisplayName("create : 400 si un identifiant assigné n'est pas un étudiant")
+    void create_rejectsNonStudentParticipant() {
+        LocalDateTime start = LocalDateTime.now().plusHours(1);
+        teacher.setRole(Role.ENSEIGNANT);
+        SessionCreateRequest req = new SessionCreateRequest(
+            publishedQuiz.getId(), start, start.plusHours(2), null, List.of(teacher.getId()));
+
+        when(userRepository.findByKeycloakId(TEACHER_KC)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findById(publishedQuiz.getId())).thenReturn(Optional.of(publishedQuiz));
+        when(userRepository.findAllById(Set.of(teacher.getId()))).thenReturn(List.of(teacher));
+
+        assertThatThrownBy(() -> sessionService.create(req, TEACHER_KC))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("non étudiant");
+        verify(sessionRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("join : un étudiant assigné entre sans code d'accès")
+    void join_assignedStudentSkipsAccessCode() {
+        Session session = openSessionWithCode("SECRET");
+        session.getParticipants().add(student);
+        Attempt attempt = Attempt.builder()
+            .id(UUID.randomUUID()).session(session).student(student)
+            .score(0).maxScore(5).attemptStatus(AttemptStatus.IN_PROGRESS).build();
+
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
+        when(attemptRepository.findBySession_IdAndStudent_Id(session.getId(), student.getId()))
+            .thenReturn(Optional.empty());
+        when(attemptRepository.save(any())).thenReturn(attempt);
+
+        assertThat(sessionService.join(session.getId(), null, STUDENT_KC).id()).isEqualTo(attempt.getId());
+    }
+
+    @Test
+    @DisplayName("join : 403 pour un étudiant non assigné à une session réservée, même avec le code")
+    void join_restrictedSessionRejectsOthers() {
+        Session session = openSessionWithCode("SECRET");
+        session.getParticipants().add(User.builder().id(UUID.randomUUID()).role(Role.ETUDIANT).build());
+
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
+
+        assertThatThrownBy(() -> sessionService.join(session.getId(), "SECRET", STUDENT_KC))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("réservée");
+        verify(attemptRepository, never()).save(any());
+    }
+
+    @Test
+    @DisplayName("updateParticipants : 403 si la session n'appartient pas à l'enseignant")
+    void updateParticipants_forbiddenForOtherTeacher() {
+        Session session = openSessionWithCode(null);
+        User otherTeacher = User.builder().id(UUID.randomUUID()).keycloakId("kc-other").build();
+
+        when(userRepository.findByKeycloakId("kc-other")).thenReturn(Optional.of(otherTeacher));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+
+        assertThatThrownBy(() -> sessionService.updateParticipants(session.getId(), List.of(), "kc-other"))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Non autorisé");
+    }
+
+    @Test
+    @DisplayName("updateParticipants : remplace la liste des étudiants assignés")
+    void updateParticipants_replacesList() {
+        Session session = openSessionWithCode(null);
+        session.getParticipants().add(User.builder().id(UUID.randomUUID()).role(Role.ETUDIANT).build());
+
+        when(userRepository.findByKeycloakId(TEACHER_KC)).thenReturn(Optional.of(teacher));
+        when(sessionRepository.findById(session.getId())).thenReturn(Optional.of(session));
+        when(userRepository.findAllById(Set.of(student.getId()))).thenReturn(List.of(student));
+        when(sessionRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        SessionDto result = sessionService.updateParticipants(session.getId(), List.of(student.getId()), TEACHER_KC);
+
+        assertThat(result.participants()).extracting(SessionParticipantDto::id).containsExactly(student.getId());
+    }
+
+    @Test
+    @DisplayName("listAssignedToStudent : renvoie les sessions assignées avec l'état de la tentative")
+    void listAssigned_includesAttemptState() {
+        Session notStarted = openSessionWithCode(null);
+        Session inProgress = openSessionWithCode(null);
+        Attempt attempt = Attempt.builder()
+            .id(UUID.randomUUID()).session(inProgress).student(student)
+            .attemptStatus(AttemptStatus.IN_PROGRESS).build();
+
+        when(userRepository.findByKeycloakId(STUDENT_KC)).thenReturn(Optional.of(student));
+        when(sessionRepository.findAssignedToStudent(student.getId())).thenReturn(List.of(notStarted, inProgress));
+        when(attemptRepository.findBySession_IdAndStudent_Id(notStarted.getId(), student.getId()))
+            .thenReturn(Optional.empty());
+        when(attemptRepository.findBySession_IdAndStudent_Id(inProgress.getId(), student.getId()))
+            .thenReturn(Optional.of(attempt));
+
+        List<AssignedSessionDto> result = sessionService.listAssignedToStudent(STUDENT_KC);
+
+        assertThat(result).hasSize(2);
+        assertThat(result.get(0).attemptId()).isNull();
+        assertThat(result.get(1).attemptStatus()).isEqualTo(AttemptStatus.IN_PROGRESS);
     }
 }

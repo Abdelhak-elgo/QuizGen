@@ -241,6 +241,15 @@ export const SessionSessionStatus = {
   CANCELLED: 'CANCELLED',
 } as const;
 
+export interface SessionParticipant {
+  id: string;
+  /** @nullable */
+  firstName?: string | null;
+  /** @nullable */
+  lastName?: string | null;
+  email: string;
+}
+
 export interface Session {
   id: string;
   quizId: string;
@@ -253,6 +262,48 @@ export interface Session {
   sessionStatus: SessionSessionStatus;
   attemptCount?: number;
   createdAt?: string;
+  participants?: SessionParticipant[];
+}
+
+export interface SessionParticipantsInput {
+  studentIds: string[];
+}
+
+export type AssignedSessionSessionStatus = typeof AssignedSessionSessionStatus[keyof typeof AssignedSessionSessionStatus];
+
+
+export const AssignedSessionSessionStatus = {
+  SCHEDULED: 'SCHEDULED',
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+/**
+ * @nullable
+ */
+export type AssignedSessionAttemptStatus = typeof AssignedSessionAttemptStatus[keyof typeof AssignedSessionAttemptStatus] | null;
+
+
+export const AssignedSessionAttemptStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export interface AssignedSession {
+  id: string;
+  quizId: string;
+  quizTitle: string;
+  nbQuestions?: number;
+  teacherName?: string;
+  startTime: string;
+  endTime: string;
+  sessionStatus: AssignedSessionSessionStatus;
+  /** @nullable */
+  attemptId?: string | null;
+  /** @nullable */
+  attemptStatus?: AssignedSessionAttemptStatus;
 }
 
 export interface SessionPage {
@@ -270,6 +321,7 @@ export interface SessionInput {
   endTime: string;
   /** @nullable */
   accessCode?: string | null;
+  studentIds?: string[];
 }
 
 export interface SessionJoin {

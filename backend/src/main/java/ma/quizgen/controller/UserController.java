@@ -13,6 +13,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -62,6 +63,17 @@ public class UserController {
         return ResponseEntity.ok(
             userService.listAllUsers(PageRequest.of(page, size, sort))
         );
+    }
+
+    /**
+     * Étudiants actifs — pour que l'enseignant les assigne à une session.
+     * Un étudiant n'apparaît qu'après sa première connexion (synchronisation Keycloak).
+     */
+    @GetMapping("/students")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Lister les étudiants (assignation aux sessions)")
+    public ResponseEntity<List<UserDto>> listStudents() {
+        return ResponseEntity.ok(userService.listStudents());
     }
 
     /**

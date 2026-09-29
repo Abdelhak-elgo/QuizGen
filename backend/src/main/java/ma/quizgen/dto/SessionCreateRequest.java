@@ -5,6 +5,7 @@ import jakarta.validation.constraints.NotNull;
 import jakarta.validation.constraints.Size;
 
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 
 public record SessionCreateRequest(
@@ -21,5 +22,8 @@ public record SessionCreateRequest(
 
     /** Code d'accès optionnel (null = session ouverte à tous). */
     @Size(min = 4, max = 20, message = "Le code d'accès doit contenir entre 4 et 20 caractères")
-    String accessCode
+    String accessCode,
+
+    /** Étudiants assignés (null/vide = session ouverte à tout étudiant ayant l'identifiant). */
+    List<UUID> studentIds
 ) {}

@@ -10,9 +10,10 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { ArrowLeft, Ban, Calendar, Key, PlayCircle, Users, BarChart3 } from 'lucide-react';
-import { format, isPast, isFuture } from 'date-fns';
+import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
+import { SessionParticipantsCard } from '@/components/session/session-participants-card';
 
 export default function SessionDetail() {
   const [match, params] = useRoute('/enseignant/sessions/:id');
@@ -115,7 +116,20 @@ export default function SessionDetail() {
                 </div>
               </div>
 
-              {session.accessCode && (
+              <SessionParticipantsCard
+                sessionId={sessionId}
+                participants={session.participants ?? []}
+                editable={canCancel}
+              />
+
+              {(session.participants ?? []).length === 0 && (
+                <div className="text-sm text-muted-foreground">
+                  Session ouverte — identifiant à communiquer aux étudiants :{' '}
+                  <span className="font-mono text-foreground select-all">{session.id}</span>
+                </div>
+              )}
+
+              {session.accessCode && (session.participants ?? []).length === 0 && (
                 <div className="flex items-center gap-3 p-3 bg-amber-50 border border-amber-200 rounded-md text-amber-800">
                   <Key size={18} />
                   <div>

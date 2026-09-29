@@ -18,6 +18,12 @@ public interface NlpServiceClient {
     NlpTaskStatus pollStatus(String taskId);
 
     /**
+     * Annule une génération (quiz supprimé) pour ne pas consommer d'appels LLM
+     * inutiles. Au mieux : un échec est journalisé, jamais propagé.
+     */
+    void cancelGeneration(String taskId);
+
+    /**
      * Soumet et attend (polling) la fin de la génération.
      * Lève une exception si timeout ou échec NLP.
      * @return NlpTaskStatus final (SUCCESS)

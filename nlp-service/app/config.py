@@ -26,6 +26,8 @@ class Settings(BaseSettings):
     generation_time_limit: int = 1260       # secondes (kill dur)
     # Au-delà, on arrête d'appeler le LLM et on renvoie les questions déjà obtenues
     generation_llm_budget: int = 1000       # secondes
+    # Tours d'appels complémentaires si le quiz n'atteint pas le nombre demandé
+    generation_top_up_rounds: int = 2
     # Une tâche restée plus longtemps en file est jetée (évite de rejouer un backlog périmé)
     generation_queue_expires: int = 900     # secondes
 

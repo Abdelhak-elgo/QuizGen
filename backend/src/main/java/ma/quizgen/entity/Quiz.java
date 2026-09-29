@@ -56,6 +56,14 @@ public class Quiz {
     @Column(name = "nlp_task_id", length = 100)
     private String nlpTaskId;
 
+    /** Types demandés à la génération (ex. "QCM,OUVERTE") — réutilisés pour une relance. */
+    @Column(name = "question_types", length = 100)
+    private String questionTypes;
+
+    /** Dernière soumission NLP : point de départ du délai d'abandon de la génération. */
+    @Column(name = "generation_started_at")
+    private LocalDateTime generationStartedAt;
+
     @OneToMany(mappedBy = "quiz", cascade = CascadeType.ALL, orphanRemoval = true)
     @OrderBy("position ASC")
     @Builder.Default

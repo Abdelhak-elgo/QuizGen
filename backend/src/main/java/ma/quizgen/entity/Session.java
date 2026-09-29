@@ -7,7 +7,9 @@ import org.hibernate.annotations.CreationTimestamp;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Entity
@@ -49,6 +51,18 @@ public class Session {
     @OneToMany(mappedBy = "session", cascade = CascadeType.ALL, orphanRemoval = true)
     @Builder.Default
     private List<Attempt> attempts = new ArrayList<>();
+
+    /**
+     * Étudiants assignés par l'enseignant. Vide = session ouverte (identifiant
+     * + code éventuel) ; non vide = réservée à ces étudiants, sans code.
+     */
+    @ManyToMany
+    @JoinTable(
+        name = "session_participants",
+        joinColumns = @JoinColumn(name = "session_id"),
+        inverseJoinColumns = @JoinColumn(name = "student_id"))
+    @Builder.Default
+    private Set<User> participants = new HashSet<>();
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -5,6 +5,7 @@
  * QuizGen API — Spring Boot backend (Keycloak JWT auth)
  * OpenAPI spec version: 1.0.0
  */
+import type { SessionParticipant } from './sessionParticipant';
 import type { SessionSessionStatus } from './sessionSessionStatus';
 
 export interface Session {
@@ -19,4 +20,5 @@ export interface Session {
   sessionStatus: SessionSessionStatus;
   attemptCount?: number;
   createdAt?: Date;
+  participants?: SessionParticipant[];
 }

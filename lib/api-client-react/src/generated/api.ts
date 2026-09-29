@@ -20,6 +20,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  AssignedSession,
   Attempt,
   AttemptPage,
   AttemptSubmit,
@@ -43,6 +44,7 @@ import type {
   SessionInput,
   SessionJoin,
   SessionPage,
+  SessionParticipantsInput,
   StudentDashboard,
   User,
   UserPage
@@ -372,6 +374,83 @@ export function useListUsers<TData = Awaited<ReturnType<typeof listUsers>>, TErr
  ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
 
   const queryOptions = getListUsersQueryOptions(params,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getListStudentsUrl = () => {
+
+
+
+
+  return `/users/students`
+}
+
+/**
+ * @summary Étudiants actifs (assignation aux sessions — ENSEIGNANT/ADMIN)
+ */
+export const listStudents = async ( options?: Parameters<typeof customFetch>[1]): Promise<User[]> => {
+
+  return customFetch<User[]>(getListStudentsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListStudentsQueryKey = () => {
+    return [
+    `/users/students`
+    ] as const;
+    }
+
+
+export const getListStudentsQueryOptions = <TData = Awaited<ReturnType<typeof listStudents>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListStudentsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listStudents>>> = ({ signal }) => listStudents({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listStudents>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListStudentsQueryResult = NonNullable<Awaited<ReturnType<typeof listStudents>>>
+export type ListStudentsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Étudiants actifs (assignation aux sessions — ENSEIGNANT/ADMIN)
+ */
+
+export function useListStudents<TData = Awaited<ReturnType<typeof listStudents>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listStudents>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListStudentsQueryOptions(options)
 
   const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
 
@@ -1069,6 +1148,77 @@ export const useDeleteQuiz = <TError = ErrorType<unknown>,
       return useMutation(getDeleteQuizMutationOptions(options));
     }
 
+export const getRegenerateQuizUrl = (id: string,) => {
+
+
+
+
+  return `/quizzes/${id}/regenerate`
+}
+
+/**
+ * @summary Relancer la génération d'un quiz en échec (FAILED)
+ */
+export const regenerateQuiz = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Quiz> => {
+
+  return customFetch<Quiz>(getRegenerateQuizUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getRegenerateQuizMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regenerateQuiz>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof regenerateQuiz>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['regenerateQuiz'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof regenerateQuiz>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  regenerateQuiz(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type RegenerateQuizMutationResult = NonNullable<Awaited<ReturnType<typeof regenerateQuiz>>>
+
+    export type RegenerateQuizMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Relancer la génération d'un quiz en échec (FAILED)
+ */
+export const useRegenerateQuiz = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof regenerateQuiz>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof regenerateQuiz>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getRegenerateQuizMutationOptions(options));
+    }
+
 export const getUpdateQuizQuestionsUrl = (id: string,) => {
 
 
@@ -1294,6 +1444,155 @@ export const useCreateSession = <TError = ErrorType<unknown>,
         TContext
       > => {
       return useMutation(getCreateSessionMutationOptions(options));
+    }
+
+export const getListAssignedSessionsUrl = () => {
+
+
+
+
+  return `/sessions/assigned`
+}
+
+/**
+ * @summary Sessions auxquelles l'étudiant connecté est assigné
+ */
+export const listAssignedSessions = async ( options?: Parameters<typeof customFetch>[1]): Promise<AssignedSession[]> => {
+
+  return customFetch<AssignedSession[]>(getListAssignedSessionsUrl(),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getListAssignedSessionsQueryKey = () => {
+    return [
+    `/sessions/assigned`
+    ] as const;
+    }
+
+
+export const getListAssignedSessionsQueryOptions = <TData = Awaited<ReturnType<typeof listAssignedSessions>>, TError = ErrorType<unknown>>( options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssignedSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getListAssignedSessionsQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof listAssignedSessions>>> = ({ signal }) => listAssignedSessions({ signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof listAssignedSessions>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type ListAssignedSessionsQueryResult = NonNullable<Awaited<ReturnType<typeof listAssignedSessions>>>
+export type ListAssignedSessionsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Sessions auxquelles l'étudiant connecté est assigné
+ */
+
+export function useListAssignedSessions<TData = Awaited<ReturnType<typeof listAssignedSessions>>, TError = ErrorType<unknown>>(
+  options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof listAssignedSessions>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getListAssignedSessionsQueryOptions(options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getUpdateSessionParticipantsUrl = (id: string,) => {
+
+
+
+
+  return `/sessions/${id}/participants`
+}
+
+/**
+ * @summary Assigner des étudiants à une session (liste vide = session ouverte)
+ */
+export const updateSessionParticipants = async (id: string,
+    sessionParticipantsInput: SessionParticipantsInput, options?: Parameters<typeof customFetch>[1]): Promise<Session> => {
+
+  return customFetch<Session>(getUpdateSessionParticipantsUrl(id),
+  {
+    ...options,
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', ...options?.headers },
+    body: JSON.stringify(sessionParticipantsInput)
+  }
+);}
+
+
+
+
+
+export const getUpdateSessionParticipantsMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSessionParticipants>>, TError,{id: string;data: BodyType<SessionParticipantsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof updateSessionParticipants>>, TError,{id: string;data: BodyType<SessionParticipantsInput>}, TContext> => {
+
+const mutationKey = ['updateSessionParticipants'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof updateSessionParticipants>>, {id: string;data: BodyType<SessionParticipantsInput>}> = (props) => {
+          const {id,data} = props ?? {};
+
+          return  updateSessionParticipants(id,data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type UpdateSessionParticipantsMutationResult = NonNullable<Awaited<ReturnType<typeof updateSessionParticipants>>>
+    export type UpdateSessionParticipantsMutationBody = BodyType<SessionParticipantsInput>
+    export type UpdateSessionParticipantsMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Assigner des étudiants à une session (liste vide = session ouverte)
+ */
+export const useUpdateSessionParticipants = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof updateSessionParticipants>>, TError,{id: string;data: BodyType<SessionParticipantsInput>}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof updateSessionParticipants>>,
+        TError,
+        {id: string;data: BodyType<SessionParticipantsInput>},
+        TContext
+      > => {
+      return useMutation(getUpdateSessionParticipantsMutationOptions(options));
     }
 
 export const getGetSessionUrl = (id: string,) => {

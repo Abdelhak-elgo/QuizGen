@@ -191,93 +191,69 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
 
     llm_started_at = time.monotonic()
 
-    for step_idx, (chunk_idx, chunk, bloom, q_type, nb, diff) in enumerate(distribution):
-        if nb == 0:
-            continue
-
+    def budget_exhausted() -> bool:
         # Rendre un quiz partiel plutôt que se faire tuer par le time limit
         # Celery (qui perdrait toutes les questions déjà générées).
-        if time.monotonic() - llm_started_at > settings.generation_llm_budget:
+        if time.monotonic() - llm_started_at <= settings.generation_llm_budget:
+            return False
+        if not pipeline_stats.get("budget_exhausted"):
             logger.warning(
-                "Budget LLM (%ds) épuisé après %d/%d segments — arrêt avec %d question(s).",
-                settings.generation_llm_budget, step_idx, total_steps, len(all_questions),
+                "Budget LLM (%ds) épuisé — arrêt avec %d question(s).",
+                settings.generation_llm_budget, len(all_questions),
             )
-            pipeline_stats["budget_exhausted"] = True
-            break
+        pipeline_stats["budget_exhausted"] = True
+        return True
 
-        # Progression 30% → 85% répartie sur les étapes de génération
-        progress = 30 + int((step_idx / max(total_steps, 1)) * 55)
+    def generate_step(step: Tuple[int, SemanticChunk, BloomClassification, QuestionType, int, Difficulty]) -> None:
+        chunk_idx, chunk, bloom, q_type, nb, diff = step
+        all_questions.extend(_generate_for_chunk(
+            document_id=str(request.document_id), chunk_idx=chunk_idx, chunk=chunk, bloom=bloom,
+            q_type=q_type, nb=nb, diff=diff, domain=domain, domain_suffix=domain_suffix,
+            embedding_model=embedding_model, stats=pipeline_stats,
+        ))
+
+    for step_idx, step in enumerate(distribution):
+        if step[4] == 0:
+            continue
+        if budget_exhausted():
+            break
+        # Progression 30% → 75% répartie sur les étapes de génération
+        progress = 30 + int((step_idx / max(total_steps, 1)) * 45)
         self.update_progress(
             progress, 100,
-            f"Segment {step_idx + 1}/{total_steps} — {q_type.value} (Bloom: {bloom.level.name})"
+            f"Segment {step_idx + 1}/{total_steps} — {step[3].value} (Bloom: {step[2].level.name})"
         )
-
-        # Combiner les keywords du chunk avec l'analyse NLP globale
-        keywords = chunk.topic_keywords
-
-        # ── RAG : récupérer les chunks connexes cross-document ────────────────
-        rag_chunks = retrieve_context(
-            document_id=str(request.document_id),
-            query_text=chunk.text,
-            top_k=3,
-            exclude_text=chunk.text,
-            embedding_model=embedding_model,
-        )
-        if rag_chunks:
-            pipeline_stats["rag_retrievals"] += 1
-
-        logger.info(
-            "Chunk %d/%d [%s, bloom=%s, diff=%s, domain=%s, rag=%d] — génération %d question(s)",
-            step_idx + 1, total_steps,
-            q_type.value, bloom.level.name, diff.value, domain, len(rag_chunks), nb,
-        )
-
-        # Génération avec prompt CoT adapté + contexte RAG cross-document
-        generated = generate_questions(
-            context=chunk.text,
-            keywords=keywords,
-            question_type=q_type,
-            nb=nb,
-            difficulty=diff,
-            bloom_level=bloom.level.name,
-            bloom_directive=bloom.prompt_directive,
-            domain=domain,
-            domain_suffix=domain_suffix,
-            rag_context=rag_chunks if rag_chunks else None,
-        )
-
-        pipeline_stats["questions_generated_raw"] += len(generated)
-
-        if not generated:
-            logger.warning("Chunk %d : aucune question générée — chunk ignoré.", chunk_idx)
-            continue
-
-        # Quality scoring (answerability sur source étendue si RAG disponible)
-        scored = score_questions(
-            questions=generated,
-            source_chunk=chunk.text,
-            embedding_model=embedding_model,
-            rag_context=rag_chunks if rag_chunks else None,
-        )
-
-        accepted = filter_quality_questions(scored)
-        pipeline_stats["questions_accepted"] += len(accepted)
-        pipeline_stats["questions_rejected"] += len(scored) - len(accepted)
-
-        all_questions.extend(accepted)
-        logger.info(
-            "Chunk %d : %d générées → %d acceptées après quality scoring.",
-            chunk_idx, len(generated), len(accepted),
-        )
-
-    self.update_progress(90, 100, f"{len(all_questions)} questions acceptées, post-traitement...")
+        generate_step(step)
 
     # ── Étape 5 : Post-traitement ─────────────────────────────────────────────
     # Déduplication ROUGE-L + validation schéma + normalisation
-    final_questions = process_questions(
-        all_questions,
-        target_difficulty=request.difficulty,
-    )
+    final_questions = process_questions(all_questions, target_difficulty=request.difficulty)
+
+    # ── Étape 5b : Compléments ────────────────────────────────────────────────
+    # Le LLM rend parfois moins de questions que demandé par appel, et le
+    # quality scoring / la déduplication en écartent : on relance des appels
+    # sur d'autres segments (types alternés) jusqu'au nombre demandé.
+    candidates = [(i, chunk, bloom) for i, (chunk, bloom) in enumerate(zip(substantial_chunks, bloom_by_chunk))]
+    tried = {step[0] for step in distribution}
+    for top_up_round in range(1, settings.generation_top_up_rounds + 1):
+        missing = request.nb_questions - len(final_questions)
+        if missing <= 0 or budget_exhausted():
+            break
+        plan = _plan_top_up(candidates, tried, missing, request.question_types, top_up_round, request.difficulty)
+        tried.update(step[0] for step in plan)
+        logger.info(
+            "Complément %d : %d question(s) manquante(s) — %d appel(s) LLM supplémentaire(s).",
+            top_up_round, missing, len(plan),
+        )
+        self.update_progress(80, 100, f"Complément : {missing} question(s) manquante(s)...")
+        pipeline_stats["top_up_rounds"] = top_up_round
+        for step in plan:
+            if budget_exhausted():
+                break
+            generate_step(step)
+        final_questions = process_questions(all_questions, target_difficulty=request.difficulty)
+
+    self.update_progress(90, 100, f"{len(final_questions)} questions retenues, finalisation...")
 
     # Respecter le nombre demandé
     final_questions = final_questions[:request.nb_questions]
@@ -307,6 +283,106 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _generate_for_chunk(
+    *,
+    document_id: str,
+    chunk_idx: int,
+    chunk: SemanticChunk,
+    bloom: BloomClassification,
+    q_type: QuestionType,
+    nb: int,
+    diff: Difficulty,
+    domain: str,
+    domain_suffix: str,
+    embedding_model: Any,
+    stats: Dict[str, Any],
+) -> List[GeneratedQuestion]:
+    """Génère `nb` question(s) sur un segment (CoT + RAG) et renvoie celles qui passent le quality scoring."""
+    # ── RAG : récupérer les chunks connexes cross-document ────────────────────
+    rag_chunks = retrieve_context(
+        document_id=document_id,
+        query_text=chunk.text,
+        top_k=3,
+        exclude_text=chunk.text,
+        embedding_model=embedding_model,
+    )
+    if rag_chunks:
+        stats["rag_retrievals"] += 1
+
+    logger.info(
+        "Chunk %d [%s, bloom=%s, diff=%s, domain=%s, rag=%d] — génération %d question(s)",
+        chunk_idx, q_type.value, bloom.level.name, diff.value, domain, len(rag_chunks), nb,
+    )
+
+    # Génération avec prompt CoT adapté + contexte RAG cross-document
+    generated = generate_questions(
+        context=chunk.text,
+        keywords=chunk.topic_keywords,
+        question_type=q_type,
+        nb=nb,
+        difficulty=diff,
+        bloom_level=bloom.level.name,
+        bloom_directive=bloom.prompt_directive,
+        domain=domain,
+        domain_suffix=domain_suffix,
+        rag_context=rag_chunks or None,
+    )
+    stats["questions_generated_raw"] += len(generated)
+
+    if not generated:
+        logger.warning("Chunk %d : aucune question générée — chunk ignoré.", chunk_idx)
+        return []
+
+    # Quality scoring (answerability sur source étendue si RAG disponible)
+    scored = score_questions(
+        questions=generated,
+        source_chunk=chunk.text,
+        embedding_model=embedding_model,
+        rag_context=rag_chunks or None,
+    )
+    accepted = filter_quality_questions(scored)
+    stats["questions_accepted"] += len(accepted)
+    stats["questions_rejected"] += len(scored) - len(accepted)
+    logger.info(
+        "Chunk %d : %d générées → %d acceptées après quality scoring.",
+        chunk_idx, len(generated), len(accepted),
+    )
+    return accepted
+
+
+def _plan_top_up(
+    candidates: List[Tuple[int, SemanticChunk, BloomClassification]],
+    tried: set,
+    missing: int,
+    requested_types: List[QuestionType],
+    round_idx: int,
+    difficulty: Difficulty,
+) -> List[Tuple[int, SemanticChunk, BloomClassification, QuestionType, int, Difficulty]]:
+    """
+    Planifie les appels complémentaires pour `missing` questions.
+
+    Une question par appel (le LLM en rend souvent une seule même quand on en
+    demande deux), sur des segments encore jamais sollicités en priorité —
+    redemander au même segment redonne la même question (écartée par la
+    déduplication ROUGE-L) ou un segment déjà jugé peu exploitable. Les types
+    demandés tournent d'un appel à l'autre.
+    """
+    if missing <= 0 or not candidates or not requested_types:
+        return []
+
+    fresh = [c for c in candidates if c[0] not in tried]
+    reused = [c for c in candidates if c[0] in tried]
+    if reused:
+        shift = round_idx % len(reused)
+        reused = reused[shift:] + reused[:shift]
+
+    plan = []
+    for offset, (chunk_idx, chunk, bloom) in enumerate((fresh + reused)[:missing]):
+        q_type = requested_types[(round_idx + offset) % len(requested_types)]
+        plan.append((chunk_idx, chunk, bloom, q_type, 1, difficulty))
+    return plan
+
 
 def _get_embedding_model():
     """

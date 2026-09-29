@@ -1,6 +1,7 @@
 import { Link } from 'wouter';
 import { useGetStudentDashboard } from '@workspace/api-client-react';
 import { EtudiantLayout } from '@/components/layout/etudiant-layout';
+import { AssignedSessionsCard } from '@/components/session/assigned-sessions-card';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -26,6 +27,8 @@ export default function EtudiantDashboard() {
             </Link>
           </Button>
         </div>
+
+        <AssignedSessionsCard />
 
         <div className="grid gap-6 md:grid-cols-3">
           <Card className="bg-gradient-to-br from-primary/10 to-transparent border-primary/20">

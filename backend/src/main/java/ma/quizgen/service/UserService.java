@@ -4,6 +4,7 @@ import ma.quizgen.dto.UserDto;
 import org.springframework.data.domain.Pageable;
 
 import ma.quizgen.dto.PageResponse;
+import java.util.List;
 import java.util.UUID;
 
 public interface UserService {
@@ -25,6 +26,9 @@ public interface UserService {
      * Liste tous les utilisateurs (ADMIN uniquement).
      */
     PageResponse<UserDto> listAllUsers(Pageable pageable);
+
+    /** Étudiants actifs, triés par nom (assignation aux sessions). */
+    List<UserDto> listStudents();
 
     /**
      * Retourne un utilisateur par son ID (ADMIN uniquement).

@@ -16,6 +16,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
 
+import java.util.List;
 import java.util.UUID;
 
 @RestController
@@ -64,6 +65,23 @@ public class SessionController {
             @AuthenticationPrincipal Jwt jwt) {
         String code = (request != null) ? request.accessCode() : null;
         return sessionService.join(id, code, CurrentUser.getKeycloakId(jwt));
+    }
+
+    @GetMapping("/assigned")
+    @PreAuthorize("hasRole('ETUDIANT')")
+    @Operation(summary = "Sessions auxquelles l'étudiant connecté est assigné")
+    public List<AssignedSessionDto> listAssigned(@AuthenticationPrincipal Jwt jwt) {
+        return sessionService.listAssignedToStudent(CurrentUser.getKeycloakId(jwt));
+    }
+
+    @PutMapping("/{id}/participants")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Assigner des étudiants à une session (liste vide = session ouverte)")
+    public SessionDto updateParticipants(
+            @PathVariable UUID id,
+            @Valid @RequestBody SessionParticipantsRequest request,
+            @AuthenticationPrincipal Jwt jwt) {
+        return sessionService.updateParticipants(id, request.studentIds(), CurrentUser.getKeycloakId(jwt));
     }
 
     @DeleteMapping("/{id}/cancel")

@@ -34,6 +34,7 @@ class QuizServiceImplTest {
     @Mock UserRepository      userRepository;
     @Mock NlpServiceClient    nlpClient;
     @Mock AttemptRepository   attemptRepository;
+    @Mock SessionRepository   sessionRepository;
 
     @InjectMocks QuizServiceImpl quizService;
 
@@ -444,5 +445,118 @@ class QuizServiceImplTest {
 
         assertThat(result.content()).hasSize(1);
         assertThat(result.totalElements()).isEqualTo(1);
+    }
+
+    // ── quiz inachevé : liste, relance, édition, suppression ──────────────────
+
+    @Test
+    @DisplayName("listForTeacher : rafraîchit les générations en cours (plus de « Brouillon » figé)")
+    void listForTeacher_advancesStaleDrafts() {
+        Quiz stale = draftQuiz(LocalDateTime.now().minusHours(2));
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByTeacher_IdOrderByCreatedAtDesc(eq(teacher.getId()), any()))
+            .thenReturn(new PageImpl<>(List.of(stale)));
+        when(nlpClient.pollStatus("task-abc")).thenReturn(new NlpTaskStatus("task-abc", "PENDING", 0, null, null));
+        when(quizRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        PageResponse<QuizDto> result = quizService.listForTeacher(TEACHER_KC_ID, PageRequest.of(0, 10));
+
+        assertThat(result.content().get(0).quizStatus()).isEqualTo(QuizStatus.FAILED);
+    }
+
+    @Test
+    @DisplayName("regenerate : relance un quiz FAILED avec ses types d'origine")
+    void regenerate_resubmitsFailedQuiz() {
+        Quiz failed = draftQuiz(LocalDateTime.now().minusHours(2));
+        failed.setQuizStatus(QuizStatus.FAILED);
+        failed.setQuestionTypes("QCM,EXERCICE");
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(failed.getId())).thenReturn(Optional.of(failed));
+        when(nlpClient.submitGeneration(any())).thenReturn("task-retry");
+        when(quizRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuizDto result = quizService.regenerate(failed.getId(), TEACHER_KC_ID);
+
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.DRAFT);
+        assertThat(result.nlpTaskId()).isEqualTo("task-retry");
+        assertThat(failed.getGenerationStartedAt()).isAfter(LocalDateTime.now().minusMinutes(1));
+        verify(nlpClient).submitGeneration(argThat(r ->
+            r.questionTypes().equals(List.of(QuestionType.QCM, QuestionType.EXERCICE))));
+    }
+
+    @Test
+    @DisplayName("regenerate : 409 si le quiz n'est pas en échec")
+    void regenerate_rejectsNonFailedQuiz() {
+        Quiz reviewing = draftQuiz(LocalDateTime.now());
+        reviewing.setQuizStatus(QuizStatus.REVIEWING);
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(reviewing.getId())).thenReturn(Optional.of(reviewing));
+
+        assertThatThrownBy(() -> quizService.regenerate(reviewing.getId(), TEACHER_KC_ID))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("échoué");
+        verifyNoInteractions(nlpClient);
+    }
+
+    @Test
+    @DisplayName("updateQuestions : 409 pendant une génération en cours")
+    void updateQuestions_blockedWhileGenerating() {
+        Quiz generating = draftQuiz(LocalDateTime.now());
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(generating.getId())).thenReturn(Optional.of(generating));
+
+        QuizUpdateQuestionsRequest req = new QuizUpdateQuestionsRequest(List.of(), false);
+
+        assertThatThrownBy(() -> quizService.updateQuestions(generating.getId(), req, TEACHER_KC_ID))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("Génération en cours");
+    }
+
+    @Test
+    @DisplayName("updateQuestions : un quiz FAILED peut être complété à la main")
+    void updateQuestions_allowsManualAuthoringOfFailedQuiz() {
+        Quiz failed = draftQuiz(LocalDateTime.now());
+        failed.setQuizStatus(QuizStatus.FAILED);
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(failed.getId())).thenReturn(Optional.of(failed));
+        when(quizRepository.save(any())).thenAnswer(inv -> inv.getArgument(0));
+
+        QuestionUpdateRequest q = new QuestionUpdateRequest(
+            null, QuestionType.OUVERTE, "Définir un SI.", null, "Un système d'information.",
+            null, Difficulty.MOYEN, null, 0);
+
+        QuizDto result = quizService.updateQuestions(failed.getId(), new QuizUpdateQuestionsRequest(List.of(q), false), TEACHER_KC_ID);
+
+        assertThat(result.quizStatus()).isEqualTo(QuizStatus.REVIEWING);
+        assertThat(result.questions()).hasSize(1);
+    }
+
+    @Test
+    @DisplayName("delete : supprime un quiz en cours de génération")
+    void delete_allowsGeneratingQuiz() {
+        Quiz generating = draftQuiz(LocalDateTime.now());
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(generating.getId())).thenReturn(Optional.of(generating));
+        when(sessionRepository.existsByQuiz_Id(generating.getId())).thenReturn(false);
+
+        quizService.delete(generating.getId(), TEACHER_KC_ID);
+
+        verify(nlpClient).cancelGeneration("task-abc");
+        verify(quizRepository).delete(generating);
+    }
+
+    @Test
+    @DisplayName("delete : 409 si le quiz est utilisé par des sessions (résultats étudiants)")
+    void delete_refusedWhenUsedBySessions() {
+        Quiz published = draftQuiz(LocalDateTime.now());
+        published.setQuizStatus(QuizStatus.PUBLISHED);
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByIdWithQuestions(published.getId())).thenReturn(Optional.of(published));
+        when(sessionRepository.existsByQuiz_Id(published.getId())).thenReturn(true);
+
+        assertThatThrownBy(() -> quizService.delete(published.getId(), TEACHER_KC_ID))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("sessions");
+        verify(quizRepository, never()).delete(any());
     }
 }

@@ -148,6 +148,9 @@ export default function QuizNew() {
             <Loader2 size={16} className="animate-spin" />
             Veuillez patienter
           </div>
+          <Button variant="ghost" size="sm" onClick={() => setLocation('/enseignant')}>
+            Continuer en arrière-plan — la génération se poursuit
+          </Button>
         </div>
       </EnseignantLayout>
     );

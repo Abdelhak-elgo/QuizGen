@@ -2,6 +2,7 @@ package ma.quizgen.service.impl;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import ma.quizgen.dto.AssignedSessionDto;
 import ma.quizgen.dto.AttemptDto;
 import ma.quizgen.dto.PageResponse;
 import ma.quizgen.dto.SessionCreateRequest;
@@ -12,6 +13,7 @@ import ma.quizgen.entity.Session;
 import ma.quizgen.entity.User;
 import ma.quizgen.entity.enums.AttemptStatus;
 import ma.quizgen.entity.enums.QuizStatus;
+import ma.quizgen.entity.enums.Role;
 import ma.quizgen.entity.enums.SessionStatus;
 import ma.quizgen.repository.AttemptRepository;
 import ma.quizgen.repository.QuizRepository;
@@ -26,6 +28,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 @Service
@@ -70,10 +75,57 @@ public class SessionServiceImpl implements SessionService {
             .endTime(request.endTime())
             .accessCode(request.accessCode())
             .sessionStatus(initial)
+            .participants(resolveStudents(request.studentIds()))
             .build());
 
-        log.info("Session {} créée pour quiz {}", session.getId(), quiz.getId());
+        log.info("Session {} créée pour quiz {} ({} étudiant(s) assigné(s))",
+            session.getId(), quiz.getId(), session.getParticipants().size());
         return SessionDto.from(session);
+    }
+
+    /** Charge les étudiants demandés ; 400 si un identifiant est inconnu ou n'est pas un étudiant. */
+    private Set<User> resolveStudents(List<UUID> studentIds) {
+        if (studentIds == null || studentIds.isEmpty()) return new HashSet<>();
+
+        Set<UUID> wanted = new HashSet<>(studentIds);
+        List<User> found = userRepository.findAllById(wanted);
+        boolean allStudents = found.stream().allMatch(u -> u.getRole() == Role.ETUDIANT);
+        if (found.size() != wanted.size() || !allStudents) {
+            throw new ResponseStatusException(HttpStatus.BAD_REQUEST,
+                "Liste d'étudiants invalide : identifiant inconnu ou utilisateur non étudiant");
+        }
+        return new HashSet<>(found);
+    }
+
+    @Override
+    @Transactional
+    public SessionDto updateParticipants(UUID sessionId, List<UUID> studentIds, String teacherKeycloakId) {
+        User teacher = resolveUser(teacherKeycloakId);
+        Session session = sessionRepository.findById(sessionId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Session introuvable"));
+
+        if (!session.getTeacher().getId().equals(teacher.getId()))
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé");
+
+        if (session.getSessionStatus() == SessionStatus.CANCELLED || session.getSessionStatus() == SessionStatus.CLOSED)
+            throw new ResponseStatusException(HttpStatus.CONFLICT, "Session terminée ou annulée : participants non modifiables");
+
+        session.getParticipants().clear();
+        session.getParticipants().addAll(resolveStudents(studentIds));
+        session = sessionRepository.save(session);
+
+        log.info("Session {} : {} étudiant(s) assigné(s)", sessionId, session.getParticipants().size());
+        return SessionDto.from(session);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<AssignedSessionDto> listAssignedToStudent(String studentKeycloakId) {
+        User student = resolveUser(studentKeycloakId);
+        return sessionRepository.findAssignedToStudent(student.getId()).stream()
+            .map(s -> AssignedSessionDto.from(s,
+                attemptRepository.findBySession_IdAndStudent_Id(s.getId(), student.getId()).orElse(null)))
+            .toList();
     }
 
     @Override
@@ -107,12 +159,18 @@ public class SessionServiceImpl implements SessionService {
                 || now.isAfter(session.getEndTime()))
             throw new ResponseStatusException(HttpStatus.CONFLICT, "La session est terminée");
 
-        if (session.getAccessCode() != null && !session.getAccessCode().isBlank()) {
+        User student = resolveUser(studentKeycloakId);
+
+        if (!session.getParticipants().isEmpty()) {
+            // Session réservée : seuls les étudiants assignés y accèdent, sans code.
+            boolean assigned = session.getParticipants().stream().anyMatch(p -> p.getId().equals(student.getId()));
+            if (!assigned)
+                throw new ResponseStatusException(HttpStatus.FORBIDDEN,
+                    "Cette session est réservée aux étudiants assignés par l'enseignant");
+        } else if (session.getAccessCode() != null && !session.getAccessCode().isBlank()) {
             if (accessCode == null || !session.getAccessCode().equals(accessCode))
                 throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Code d'accès invalide");
         }
-
-        User student = resolveUser(studentKeycloakId);
 
         // Idempotent — retourne l'attempt existant si l'étudiant a déjà rejoint
         var existing = attemptRepository.findBySession_IdAndStudent_Id(sessionId, student.getId());

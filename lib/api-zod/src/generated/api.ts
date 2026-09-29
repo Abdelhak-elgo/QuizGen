@@ -77,6 +77,22 @@ export const ListUsersResponse = zod.object({
 
 
 /**
+ * @summary Étudiants actifs (assignation aux sessions — ENSEIGNANT/ADMIN)
+ */
+export const ListStudentsResponseItem = zod.object({
+  "id": zod.uuid(),
+  "keycloakId": zod.string().optional(),
+  "email": zod.string(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "role": zod.enum(['ENSEIGNANT', 'ETUDIANT', 'ADMIN']),
+  "isActive": zod.boolean(),
+  "createdAt": zod.coerce.date().optional()
+})
+export const ListStudentsResponse = zod.array(ListStudentsResponseItem)
+
+
+/**
  * @summary Mes documents PDF
  */
 export const listDocumentsQueryPageDefault = 0;
@@ -302,6 +318,41 @@ export const DeleteQuizResponse = zod.void()
 
 
 /**
+ * @summary Relancer la génération d'un quiz en échec (FAILED)
+ */
+export const RegenerateQuizParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const RegenerateQuizResponse = zod.object({
+  "id": zod.uuid(),
+  "documentId": zod.uuid().optional(),
+  "documentName": zod.string().optional(),
+  "teacherId": zod.uuid().optional(),
+  "teacherName": zod.string().optional(),
+  "title": zod.string(),
+  "description": zod.string().nullish(),
+  "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
+  "nbQuestions": zod.int(),
+  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED', 'FAILED']),
+  "nlpTaskId": zod.string().nullish(),
+  "questions": zod.array(zod.object({
+  "id": zod.uuid(),
+  "type": zod.enum(['QCM', 'OUVERTE', 'EXERCICE']),
+  "content": zod.string(),
+  "options": zod.array(zod.string()).nullish(),
+  "correctAnswer": zod.string(),
+  "explanation": zod.string().nullish(),
+  "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
+  "keywords": zod.array(zod.string()).optional(),
+  "position": zod.int()
+})).optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "updatedAt": zod.coerce.date().optional()
+})
+
+
+/**
  * @summary Éditer les questions et publier le quiz
  */
 export const UpdateQuizQuestionsParams = zod.object({
@@ -373,7 +424,13 @@ export const ListSessionsResponse = zod.object({
   "accessCode": zod.string().nullish(),
   "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
   "attemptCount": zod.int().optional(),
-  "createdAt": zod.coerce.date().optional()
+  "createdAt": zod.coerce.date().optional(),
+  "participants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "email": zod.string()
+})).optional()
 })),
   "page": zod.int(),
   "size": zod.int(),
@@ -390,7 +447,8 @@ export const CreateSessionBody = zod.object({
   "quizId": zod.uuid(),
   "startTime": zod.coerce.date(),
   "endTime": zod.coerce.date(),
-  "accessCode": zod.string().nullish()
+  "accessCode": zod.string().nullish(),
+  "studentIds": zod.array(zod.uuid()).optional()
 })
 
 export const CreateSessionResponse = zod.object({
@@ -403,7 +461,62 @@ export const CreateSessionResponse = zod.object({
   "accessCode": zod.string().nullish(),
   "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
   "attemptCount": zod.int().optional(),
-  "createdAt": zod.coerce.date().optional()
+  "createdAt": zod.coerce.date().optional(),
+  "participants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "email": zod.string()
+})).optional()
+})
+
+
+/**
+ * @summary Sessions auxquelles l'étudiant connecté est assigné
+ */
+export const ListAssignedSessionsResponseItem = zod.object({
+  "id": zod.uuid(),
+  "quizId": zod.uuid(),
+  "quizTitle": zod.string(),
+  "nbQuestions": zod.int().optional(),
+  "teacherName": zod.string().optional(),
+  "startTime": zod.coerce.date(),
+  "endTime": zod.coerce.date(),
+  "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
+  "attemptId": zod.uuid().nullish(),
+  "attemptStatus": zod.union([zod.literal('IN_PROGRESS'),zod.literal('SUBMITTED'),zod.literal('EXPIRED'),zod.literal(null)]).nullish()
+})
+export const ListAssignedSessionsResponse = zod.array(ListAssignedSessionsResponseItem)
+
+
+/**
+ * @summary Assigner des étudiants à une session (liste vide = session ouverte)
+ */
+export const UpdateSessionParticipantsParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const UpdateSessionParticipantsBody = zod.object({
+  "studentIds": zod.array(zod.uuid())
+})
+
+export const UpdateSessionParticipantsResponse = zod.object({
+  "id": zod.uuid(),
+  "quizId": zod.uuid(),
+  "quizTitle": zod.string(),
+  "teacherId": zod.uuid().optional(),
+  "startTime": zod.coerce.date(),
+  "endTime": zod.coerce.date(),
+  "accessCode": zod.string().nullish(),
+  "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
+  "attemptCount": zod.int().optional(),
+  "createdAt": zod.coerce.date().optional(),
+  "participants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "email": zod.string()
+})).optional()
 })
 
 
@@ -424,7 +537,13 @@ export const GetSessionResponse = zod.object({
   "accessCode": zod.string().nullish(),
   "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
   "attemptCount": zod.int().optional(),
-  "createdAt": zod.coerce.date().optional()
+  "createdAt": zod.coerce.date().optional(),
+  "participants": zod.array(zod.object({
+  "id": zod.uuid(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "email": zod.string()
+})).optional()
 })
 
 

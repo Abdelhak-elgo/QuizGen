@@ -61,6 +61,16 @@ public class NlpServiceClientImpl implements NlpServiceClient {
     }
 
     @Override
+    public void cancelGeneration(String taskId) {
+        try {
+            restTemplate.delete(nlpBaseUrl + "/tasks/" + taskId);
+            log.info("Tâche NLP annulée — task_id={}", taskId);
+        } catch (RestClientException e) {
+            log.warn("Annulation de la tâche NLP {} impossible : {}", taskId, e.getMessage());
+        }
+    }
+
+    @Override
     public NlpTaskStatus submitAndWait(NlpGenerateRequest request) {
         String taskId = submitGeneration(request);
         long deadline = System.currentTimeMillis() + timeoutMs;

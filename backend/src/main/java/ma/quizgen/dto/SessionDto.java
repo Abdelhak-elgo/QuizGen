@@ -4,6 +4,8 @@ import ma.quizgen.entity.Session;
 import ma.quizgen.entity.enums.SessionStatus;
 
 import java.time.LocalDateTime;
+import java.util.Comparator;
+import java.util.List;
 import java.util.UUID;
 
 public record SessionDto(
@@ -16,9 +18,15 @@ public record SessionDto(
     String accessCode,
     SessionStatus sessionStatus,
     int attemptCount,
-    LocalDateTime createdAt
+    LocalDateTime createdAt,
+    List<SessionParticipantDto> participants
 ) {
     public static SessionDto from(Session session) {
+        List<SessionParticipantDto> participants = session.getParticipants() == null ? List.of()
+            : session.getParticipants().stream()
+                .map(SessionParticipantDto::from)
+                .sorted(Comparator.comparing(SessionParticipantDto::lastName, Comparator.nullsLast(String::compareTo)))
+                .toList();
         return new SessionDto(
             session.getId(),
             session.getQuiz().getId(),
@@ -29,7 +37,8 @@ public record SessionDto(
             session.getAccessCode(),
             session.getSessionStatus(),
             session.getAttempts() == null ? 0 : session.getAttempts().size(),
-            session.getCreatedAt()
+            session.getCreatedAt(),
+            participants
         );
     }
 }

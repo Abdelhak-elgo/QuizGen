@@ -193,6 +193,20 @@ async def get_status(task_id: str) -> TaskStatus:
     return TaskStatus(task_id=task_id, status=state)
 
 
+@app.delete(
+    "/tasks/{task_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    tags=["Quiz Generation"],
+)
+async def cancel_task(task_id: str) -> None:
+    """
+    Annule une génération (quiz supprimé côté backend) : retirée de la file si
+    elle n'a pas démarré, interrompue sinon — évite des appels LLM inutiles.
+    """
+    celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
+    logger.info("Tâche %s révoquée", task_id)
+
+
 # ── BERTScore ─────────────────────────────────────────────────────────────────
 
 def _build_score_response(req: ScoreRequest) -> ScoreResponse:

@@ -48,6 +48,15 @@ public class QuizController {
         return quizService.create(request, CurrentUser.getKeycloakId(jwt));
     }
 
+    @PostMapping("/{id}/regenerate")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Relancer la génération NLP d'un quiz en échec")
+    public QuizDto regenerate(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return quizService.regenerate(id, CurrentUser.getKeycloakId(jwt));
+    }
+
     @GetMapping("/{id}")
     @Operation(summary = "Détail d'un quiz avec ses questions")
     public QuizDto getById(

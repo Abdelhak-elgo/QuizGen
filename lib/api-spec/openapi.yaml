@@ -83,6 +83,20 @@ paths:
               schema:
                 $ref: "#/components/schemas/UserPage"
 
+  /users/students:
+    get:
+      operationId: listStudents
+      tags: [users]
+      summary: Étudiants actifs (assignation aux sessions — ENSEIGNANT/ADMIN)
+      responses:
+        "200":
+          description: Students
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/User" }
+
   # ── Documents ──────────────────────────────────────────────────────────────
   /documents:
     get:
@@ -216,6 +230,21 @@ paths:
         "204":
           description: Deleted
 
+  /quizzes/{id}/regenerate:
+    post:
+      operationId: regenerateQuiz
+      tags: [quizzes]
+      summary: Relancer la génération d'un quiz en échec (FAILED)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Quiz resubmitted (DRAFT)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Quiz"
+
   /quizzes/{id}/questions:
     put:
       operationId: updateQuizQuestions
@@ -266,6 +295,41 @@ paths:
       responses:
         "201":
           description: Session created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Session"
+
+  /sessions/assigned:
+    get:
+      operationId: listAssignedSessions
+      tags: [sessions]
+      summary: Sessions auxquelles l'étudiant connecté est assigné
+      responses:
+        "200":
+          description: Assigned sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items: { $ref: "#/components/schemas/AssignedSession" }
+
+  /sessions/{id}/participants:
+    put:
+      operationId: updateSessionParticipants
+      tags: [sessions]
+      summary: Assigner des étudiants à une session (liste vide = session ouverte)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/SessionParticipantsInput"
+      responses:
+        "200":
+          description: Updated session
           content:
             application/json:
               schema:
@@ -579,6 +643,37 @@ components:
         sessionStatus: { type: string, enum: [SCHEDULED, OPEN, CLOSED, CANCELLED] }
         attemptCount: { type: integer }
         createdAt: { type: string, format: date-time }
+        participants: { type: array, items: { $ref: "#/components/schemas/SessionParticipant" } }
+
+    SessionParticipant:
+      type: object
+      required: [id, email]
+      properties:
+        id: { type: string, format: uuid }
+        firstName: { type: ["string", "null"] }
+        lastName: { type: ["string", "null"] }
+        email: { type: string }
+
+    SessionParticipantsInput:
+      type: object
+      required: [studentIds]
+      properties:
+        studentIds: { type: array, items: { type: string, format: uuid } }
+
+    AssignedSession:
+      type: object
+      required: [id, quizId, quizTitle, startTime, endTime, sessionStatus]
+      properties:
+        id: { type: string, format: uuid }
+        quizId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        nbQuestions: { type: integer }
+        teacherName: { type: string }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        sessionStatus: { type: string, enum: [SCHEDULED, OPEN, CLOSED, CANCELLED] }
+        attemptId: { type: ["string", "null"], format: uuid }
+        attemptStatus: { type: ["string", "null"], enum: [IN_PROGRESS, SUBMITTED, EXPIRED, null] }
 
     SessionPage:
       type: object
@@ -599,6 +694,7 @@ components:
         startTime: { type: string, format: date-time }
         endTime: { type: string, format: date-time }
         accessCode: { type: ["string", "null"] }
+        studentIds: { type: array, items: { type: string, format: uuid } }
 
     SessionJoin:
       type: object

@@ -3,7 +3,7 @@
 from app.bloom_classifier import BloomClassification, BloomLevel
 from app.models import Difficulty, QuestionType, TextSection
 from app.semantic_chunker import SemanticChunk
-from app.tasks import _plan_question_distribution, _sections_to_chunks
+from app.tasks import _plan_question_distribution, _plan_top_up, _sections_to_chunks
 
 
 def _chunk(words: int = 100, coherence: float = 0.8) -> SemanticChunk:
@@ -109,3 +109,41 @@ class TestGetEmbeddingModel:
         monkeypatch.setattr(nlp_pipeline, "_load_keybert_model", lambda: SimpleNamespace(model=backend))
 
         assert _get_embedding_model() is sentence_transformer
+
+
+class TestPlanTopUp:
+    QCM = [QuestionType.QCM]
+
+    def _candidates(self, n: int):
+        return [(i, _chunk(), _bloom(QuestionType.QCM)) for i in range(n)]
+
+    def _plan(self, candidates, tried=frozenset(), missing=1, types=None, round_idx=1):
+        return _plan_top_up(candidates, set(tried), missing, types or self.QCM, round_idx, Difficulty.MOYEN)
+
+    def test_one_question_per_call_covering_the_missing_count(self):
+        plan = self._plan(self._candidates(6), missing=3)
+
+        assert [step[4] for step in plan] == [1, 1, 1]
+        assert len({step[0] for step in plan}) == 3
+
+    def test_prefers_chunks_never_tried(self):
+        plan = self._plan(self._candidates(6), tried={0, 1, 2, 3}, missing=2)
+
+        assert {step[0] for step in plan} == {4, 5}
+
+    def test_reuses_tried_chunks_rotated_by_round_when_all_tried(self):
+        cands = self._candidates(4)
+        first = self._plan(cands, tried={0, 1, 2, 3}, round_idx=1)[0][0]
+        second = self._plan(cands, tried={0, 1, 2, 3}, round_idx=2)[0][0]
+
+        assert first != second
+
+    def test_rotates_requested_types(self):
+        types = [QuestionType.QCM, QuestionType.OUVERTE]
+        plan = self._plan(self._candidates(4), missing=4, types=types)
+
+        assert {step[3] for step in plan} == set(types)
+
+    def test_nothing_to_plan_without_chunks_or_missing(self):
+        assert self._plan([], missing=3) == []
+        assert self._plan(self._candidates(2), missing=0) == []

@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useLocation } from 'wouter';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -16,6 +17,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Form, FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form';
 import { PlayCircle } from 'lucide-react';
 import { toast } from 'sonner';
+import { Label } from '@/components/ui/label';
+import { StudentPicker } from '@/components/session/student-picker';
+import { apiErrorMessage } from '@/lib/api-error';
 
 const sessionSchema = z.object({
   quizId: z.string().min(1, "Veuillez sélectionner un quiz"),
@@ -37,6 +41,7 @@ export default function SessionNew() {
   const quizzes = (quizzesData?.content || []).filter(q => q.quizStatus === 'PUBLISHED');
 
   const createSession = useCreateSession();
+  const [studentIds, setStudentIds] = useState<string[]>([]);
 
   const form = useForm<z.infer<typeof sessionSchema>>({
     resolver: zodResolver(sessionSchema),
@@ -50,22 +55,23 @@ export default function SessionNew() {
 
   const onSubmit = async (values: z.infer<typeof sessionSchema>) => {
     try {
-      const result = await createSession.mutateAsync({ 
+      const result = await createSession.mutateAsync({
         data: {
           quizId: values.quizId,
           startTime: new Date(values.startTime).toISOString(),
           endTime: new Date(values.endTime).toISOString(),
-          accessCode: values.accessCode || undefined
+          accessCode: values.accessCode || undefined,
+          studentIds,
         }
       });
-      
+
       queryClient.invalidateQueries({ queryKey: getListSessionsQueryKey() });
       toast.success('Session créée avec succès !');
       setLocation(`/enseignant/sessions/${result.id}`);
-      
+
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors de la création de la session');
+      toast.error(apiErrorMessage(error, 'Erreur lors de la création de la session'));
     }
   };
 
@@ -151,11 +157,18 @@ export default function SessionNew() {
                       <FormControl>
                         <Input placeholder="Ex: MIAGE2024" {...field} />
                       </FormControl>
-                      <FormDescription>Limitez l'accès à la session avec un code.</FormDescription>
+                      <FormDescription>
+                        Limitez l'accès à la session avec un code (inutile pour les étudiants assignés ci-dessous).
+                      </FormDescription>
                       <FormMessage />
                     </FormItem>
                   )}
                 />
+
+                <div className="space-y-2">
+                  <Label>Étudiants assignés (optionnel)</Label>
+                  <StudentPicker selectedIds={studentIds} onChange={setStudentIds} />
+                </div>
 
                 <div className="flex justify-end gap-4 pt-4 border-t">
                   <Button type="button" variant="outline" onClick={() => window.history.back()}>

@@ -10,6 +10,7 @@ import { fr } from 'date-fns/locale';
 import { FileText, Trash2, UploadCloud, BrainCircuit, Download, FilePlus2 } from 'lucide-react';
 import { toast } from 'sonner';
 import { Link } from 'wouter';
+import { apiErrorMessage } from '@/lib/api-error';
 
 function formatBytes(bytes: number, decimals = 2) {
   if (!+bytes) return '0 Bytes';
@@ -20,15 +21,13 @@ function formatBytes(bytes: number, decimals = 2) {
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
 }
 
-// Le backend renvoie un ProblemDetail ({ title, detail }) : l'afficher plutôt
-// qu'un message générique (taille, type de fichier, etc.).
+// Afficher la raison renvoyée par le serveur (taille, type de fichier…)
+// plutôt qu'un message générique.
 function uploadErrorMessage(error: unknown): string {
-  if (error instanceof ApiError) {
-    if (error.status === 413) return 'Fichier trop volumineux. La limite est de 20 MB.';
-    const data = error.data as { detail?: string; title?: string } | null;
-    if (data?.detail) return data.detail;
+  if (error instanceof ApiError && error.status === 413) {
+    return 'Fichier trop volumineux. La limite est de 20 MB.';
   }
-  return 'Erreur lors de l\'upload du document.';
+  return apiErrorMessage(error, 'Erreur lors de l\'upload du document.');
 }
 
 export default function DocumentLibrary() {

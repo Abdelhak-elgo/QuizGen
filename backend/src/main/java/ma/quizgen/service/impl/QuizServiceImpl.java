@@ -13,6 +13,7 @@ import ma.quizgen.entity.enums.QuestionType;
 import ma.quizgen.entity.enums.QuizStatus;
 import ma.quizgen.entity.enums.Role;
 import ma.quizgen.repository.AttemptRepository;
+import ma.quizgen.repository.SessionRepository;
 import ma.quizgen.repository.DocumentRepository;
 import ma.quizgen.repository.QuestionRepository;
 import ma.quizgen.repository.QuizRepository;
@@ -29,6 +30,7 @@ import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -44,6 +46,7 @@ public class QuizServiceImpl implements QuizService {
     private final UserRepository      userRepository;
     private final NlpServiceClient    nlpClient;
     private final AttemptRepository   attemptRepository;
+    private final SessionRepository   sessionRepository;
 
     /**
      * Au-delà de ce délai, une génération sans résultat est considérée perdue
@@ -75,19 +78,7 @@ public class QuizServiceImpl implements QuizService {
             throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Ce document ne vous appartient pas");
         }
 
-        // Empêche de soumettre plusieurs générations NLP concurrentes pour le même
-        // document (ex: double-clic, ou nouvel essai pendant qu'une génération
-        // précédente tourne encore) — chaque tâche est coûteuse en CPU et fait
-        // concurrence aux autres sur le même worker.
-        // Rafraîchit d'abord les générations en cours de ce document : une
-        // génération terminée ou perdue ne doit pas bloquer une nouvelle demande.
-        quizRepository.findByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)
-            .forEach(this::advanceIfNlpDone);
-
-        if (quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)) {
-            throw new ResponseStatusException(HttpStatus.CONFLICT,
-                "Une génération est déjà en cours pour ce document. Veuillez patienter qu'elle se termine.");
-        }
+        ensureNoGenerationInProgress(doc);
 
         List<QuestionType> types = (request.questionTypes() != null && !request.questionTypes().isEmpty())
             ? request.questionTypes()
@@ -101,37 +92,96 @@ public class QuizServiceImpl implements QuizService {
             .description(request.description())
             .difficulty(request.difficulty())
             .nbQuestions(request.nbQuestions())
+            .questionTypes(joinTypes(types))
             .quizStatus(QuizStatus.DRAFT)
             .build());
 
+        return QuizDto.from(submitGeneration(quiz));
+    }
+
+    @Override
+    @Transactional
+    public QuizDto regenerate(UUID quizId, String teacherKeycloakId) {
+        Quiz quiz = findOwnedQuiz(quizId, teacherKeycloakId);
+        if (quiz.getQuizStatus() != QuizStatus.FAILED) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Seul un quiz dont la génération a échoué peut être relancé");
+        }
+        ensureNoGenerationInProgress(quiz.getDocument());
+
+        quiz.setQuizStatus(QuizStatus.DRAFT);
+        return QuizDto.from(submitGeneration(quiz));
+    }
+
+    /**
+     * Empêche de soumettre plusieurs générations NLP concurrentes pour le même
+     * document (double-clic, nouvel essai pendant qu'une génération tourne) —
+     * chaque tâche est coûteuse et fait concurrence aux autres sur le worker.
+     * Les générations en cours sont d'abord rafraîchies : une génération
+     * terminée ou perdue ne doit pas bloquer une nouvelle demande.
+     */
+    private void ensureNoGenerationInProgress(Document doc) {
+        quizRepository.findByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)
+            .forEach(this::advanceIfNlpDone);
+
+        if (quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Une génération est déjà en cours pour ce document. Veuillez patienter qu'elle se termine.");
+        }
+    }
+
+    /**
+     * Soumission asynchrone uniquement : la génération peut prendre plusieurs
+     * minutes. Le résultat est récupéré via le polling de GET /quizzes/{id}
+     * (voir advanceIfNlpDone) — bloquer la requête HTTP ferait attendre
+     * l'enseignant sans retour.
+     */
+    private Quiz submitGeneration(Quiz quiz) {
+        Document doc = quiz.getDocument();
         NlpGenerateRequest nlpReq = new NlpGenerateRequest(
             doc.getId().toString(),
             doc.getBucketName(),
             doc.getObjectKey(),
-            request.nbQuestions(),
-            types,
-            request.difficulty()
+            quiz.getNbQuestions(),
+            parseTypes(quiz.getQuestionTypes()),
+            quiz.getDifficulty()
         );
-
-        // Soumission asynchrone uniquement : la génération peut prendre plusieurs
-        // minutes (chargement modèle + appels LLM par chunk). Le résultat est
-        // récupéré via le polling de GET /quizzes/{id} (voir getById), qui
-        // interroge le statut de la tâche Celery et complète le quiz dès qu'il
-        // est prêt. Bloquer la requête HTTP ici ferait attendre l'enseignant
-        // plusieurs minutes sans retour, et chaque nouvel essai soumettrait une
-        // tâche NLP redondante en plus de celle déjà en cours.
         try {
             String taskId = nlpClient.submitGeneration(nlpReq);
             quiz.setNlpTaskId(taskId);
+            quiz.setGenerationStartedAt(LocalDateTime.now());
             quiz = quizRepository.save(quiz);
             log.info("Quiz {} — génération NLP soumise (task_id={})", quiz.getId(), taskId);
+            return quiz;
         } catch (Exception e) {
             log.error("Échec de soumission NLP pour quiz {}: {}", quiz.getId(), e.getMessage());
             throw new ResponseStatusException(HttpStatus.SERVICE_UNAVAILABLE,
                 "Impossible de soumettre la génération NLP : " + e.getMessage());
         }
+    }
 
-        return QuizDto.from(quiz);
+    private static String joinTypes(List<QuestionType> types) {
+        return String.join(",", types.stream().map(Enum::name).toList());
+    }
+
+    /** Types mémorisés du quiz ; défaut QCM + OUVERTE pour les quiz créés avant leur mémorisation. */
+    private static List<QuestionType> parseTypes(String stored) {
+        if (stored == null || stored.isBlank()) return List.of(QuestionType.QCM, QuestionType.OUVERTE);
+        return Arrays.stream(stored.split(",")).map(String::trim).map(QuestionType::valueOf).toList();
+    }
+
+    private Quiz findOwnedQuiz(UUID quizId, String teacherKeycloakId) {
+        User teacher = resolveUser(teacherKeycloakId);
+        Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
+            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz introuvable"));
+        if (!quiz.getTeacher().getId().equals(teacher.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé");
+        }
+        return quiz;
+    }
+
+    private static boolean isGenerating(Quiz quiz) {
+        return quiz.getQuizStatus() == QuizStatus.DRAFT && quiz.getNlpTaskId() != null;
     }
 
     @Override
@@ -195,8 +245,11 @@ public class QuizServiceImpl implements QuizService {
     }
 
     private boolean isGenerationOverdue(Quiz quiz) {
-        return quiz.getCreatedAt() != null
-            && quiz.getCreatedAt().plusMinutes(generationTimeoutMinutes).isBefore(LocalDateTime.now());
+        // Depuis la dernière soumission (relance comprise) ; created_at pour les anciens quiz
+        LocalDateTime startedAt = quiz.getGenerationStartedAt() != null
+            ? quiz.getGenerationStartedAt() : quiz.getCreatedAt();
+        return startedAt != null
+            && startedAt.plusMinutes(generationTimeoutMinutes).isBefore(LocalDateTime.now());
     }
 
     private Quiz markFailed(Quiz quiz, String reason) {
@@ -207,25 +260,29 @@ public class QuizServiceImpl implements QuizService {
     }
 
     @Override
-    @Transactional(readOnly = true)
+    @Transactional
     public PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, Pageable pageable) {
         User teacher = resolveUser(teacherKeycloakId);
         Page<Quiz> page = quizRepository.findByTeacher_IdOrderByCreatedAtDesc(teacher.getId(), pageable);
+        // Les générations en cours sont rafraîchies ici aussi : sans cela, un quiz
+        // dont l'enseignant a quitté la page de génération resterait « Brouillon »
+        // dans la liste tant que personne ne l'ouvre.
+        page.getContent().stream().filter(QuizServiceImpl::isGenerating).forEach(this::advanceIfNlpDone);
         return PageResponse.of(page.map(QuizDto::from));
     }
 
     @Override
     @Transactional
     public QuizDto updateQuestions(UUID quizId, QuizUpdateQuestionsRequest request, String teacherKeycloakId) {
-        User teacher = resolveUser(teacherKeycloakId);
-        Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz introuvable"));
+        Quiz quiz = findOwnedQuiz(quizId, teacherKeycloakId);
 
-        if (!quiz.getTeacher().getId().equals(teacher.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé");
-        }
         if (quiz.getQuizStatus() == QuizStatus.ARCHIVED) {
             throw new ResponseStatusException(HttpStatus.CONFLICT, "Un quiz archivé ne peut pas être modifié");
+        }
+        if (isGenerating(quiz)) {
+            // Les questions générées seraient ajoutées par-dessus l'édition manuelle
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Génération en cours : attendez sa fin (ou son échec) avant de modifier les questions");
         }
 
         questionRepository.deleteByQuiz_Id(quizId);
@@ -259,13 +316,20 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public void delete(UUID quizId, String teacherKeycloakId) {
-        User teacher = resolveUser(teacherKeycloakId);
-        Quiz quiz = quizRepository.findById(quizId)
-            .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz introuvable"));
-        if (!quiz.getTeacher().getId().equals(teacher.getId())) {
-            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Non autorisé");
+        Quiz quiz = findOwnedQuiz(quizId, teacherKeycloakId);
+        // La suppression d'un quiz supprime en cascade ses sessions et les
+        // copies des étudiants : on la refuse plutôt que de perdre des résultats.
+        if (sessionRepository.existsByQuiz_Id(quizId)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Ce quiz est utilisé par des sessions : il ne peut pas être supprimé");
+        }
+        // Une génération en cours est annulée : elle consommerait sinon des
+        // appels LLM (payants en mode en ligne) pour un quiz qui n'existe plus.
+        if (isGenerating(quiz)) {
+            nlpClient.cancelGeneration(quiz.getNlpTaskId());
         }
         quizRepository.delete(quiz);
+        log.info("Quiz {} supprimé (statut {})", quizId, quiz.getQuizStatus());
     }
 
     // ── private helpers ───────────────────────────────────────────────────────

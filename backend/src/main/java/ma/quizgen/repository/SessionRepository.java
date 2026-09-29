@@ -26,4 +26,14 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
     List<Session> findSessionsToClose(@Param("now") LocalDateTime now);
 
     Page<Session> findByQuiz_IdOrderByStartTimeDesc(UUID quizId, Pageable pageable);
+
+    boolean existsByQuiz_Id(UUID quizId);
+
+    /** Sessions (non annulées) auxquelles l'étudiant est assigné, les plus proches d'abord. */
+    @Query("""
+        SELECT s FROM Session s JOIN s.participants p
+        WHERE p.id = :studentId AND s.sessionStatus <> 'CANCELLED'
+        ORDER BY s.startTime ASC
+        """)
+    List<Session> findAssignedToStudent(@Param("studentId") UUID studentId);
 }

@@ -1,22 +1,39 @@
 import { Link } from 'wouter';
-import { useListQuizzes, useListSessions, useGetMe } from '@workspace/api-client-react';
+import { useListQuizzes, useListSessions, useGetMe, getListQuizzesQueryKey } from '@workspace/api-client-react';
 import { EnseignantLayout } from '@/components/layout/enseignant-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, PlayCircle, Plus, Users } from 'lucide-react';
+import { FileText, Loader2, PlayCircle, Plus, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
+const GENERATION_POLL_MS = 5000;
+
 export default function EnseignantDashboard() {
   const { data: me } = useGetMe();
-  const { data: quizzesData, isLoading: isLoadingQuizzes } = useListQuizzes({ size: 5 });
+  const { data: quizzesData, isLoading: isLoadingQuizzes } = useListQuizzes({ size: 5 }, {
+    query: {
+      queryKey: getListQuizzesQueryKey({ size: 5 }),
+      // Le backend met à jour les générations en cours à chaque liste : on
+      // rafraîchit tant qu'un quiz est encore en génération.
+      refetchInterval: (query) =>
+        query.state.data?.content?.some(q => q.quizStatus === 'DRAFT' && q.nlpTaskId) ? GENERATION_POLL_MS : false,
+    },
+  });
   const { data: sessionsData, isLoading: isLoadingSessions } = useListSessions({ size: 5 });
 
   const quizzes = quizzesData?.content || [];
   const sessions = sessionsData?.content || [];
 
-  const getStatusBadge = (status: string) => {
+  const getStatusBadge = (status: string, isGenerating: boolean) => {
+    if (isGenerating) {
+      return (
+        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
+          <Loader2 size={11} className="animate-spin mr-1" /> Génération…
+        </Badge>
+      );
+    }
     switch (status) {
       case 'DRAFT': return <Badge variant="secondary">Brouillon</Badge>;
       case 'FAILED': return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Échec</Badge>;
@@ -110,7 +127,7 @@ export default function EnseignantDashboard() {
                         </div>
                       </div>
                       <div className="shrink-0">
-                        {getStatusBadge(quiz.quizStatus)}
+                        {getStatusBadge(quiz.quizStatus, quiz.quizStatus === 'DRAFT' && !!quiz.nlpTaskId)}
                       </div>
                     </div>
                   ))}

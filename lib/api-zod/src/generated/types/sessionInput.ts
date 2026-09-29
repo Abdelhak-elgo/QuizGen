@@ -12,4 +12,5 @@ export interface SessionInput {
   endTime: Date;
   /** @nullable */
   accessCode?: string | null;
+  studentIds?: string[];
 }

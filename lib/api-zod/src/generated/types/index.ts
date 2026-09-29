@@ -6,6 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
+export * from './assignedSession';
+export * from './assignedSessionAttemptStatus';
+export * from './assignedSessionSessionStatus';
 export * from './attempt';
 export * from './attemptAnswers';
 export * from './attemptAttemptStatus';
@@ -44,6 +47,8 @@ export * from './session';
 export * from './sessionInput';
 export * from './sessionJoin';
 export * from './sessionPage';
+export * from './sessionParticipant';
+export * from './sessionParticipantsInput';
 export * from './sessionSessionStatus';
 export * from './studentDashboard';
 export * from './user';
