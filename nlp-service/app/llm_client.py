@@ -19,14 +19,16 @@ from typing import Any, Dict, List, Optional
 
 import httpx
 
-from typing import Any, Dict, List, Optional
-
 from app.chain_of_thought import SYSTEM_PROMPT_COT, build_cot_prompt
 from app.config import get_settings
+from app.llm_providers import LlmConfigError, complete, resolve_target
 from app.models import Difficulty, GeneratedQuestion, QuestionType
 
 logger = logging.getLogger(__name__)
 settings = get_settings()
+
+# Erreurs de configuration côté fournisseur (clé, modèle, requête) — pas de nouvel essai
+NON_RETRYABLE_HTTP_CODES = {400, 401, 403, 404, 422}
 
 
 # ── Extraction JSON robuste ───────────────────────────────────────────────────
@@ -185,35 +187,18 @@ def generate_questions(
         rag_context=rag_context,
     )
 
-    payload: Dict[str, Any] = {
-        "model": settings.ollama_model,
-        "prompt": prompt,
-        "system": SYSTEM_PROMPT_COT,
-        "stream": False,
-        "options": {
-            "temperature": settings.llm_temperature,
-            "num_predict": 2048,
-            # Pénaliser la répétition — aide à diversifier les distracteurs QCM
-            "repeat_penalty": 1.1,
-        },
-    }
+    # Lève LlmConfigError tout de suite si LLM_MODE / variables en ligne invalides
+    target = resolve_target()
 
     for attempt in range(1, max_retries + 1):
         try:
             logger.info(
-                "Ollama CoT — tentative %d/%d (type=%s, bloom=%s, nb=%d, domain=%s, rag=%d chunks)",
-                attempt, max_retries,
+                "LLM CoT [%s:%s] — tentative %d/%d (type=%s, bloom=%s, nb=%d, domain=%s, rag=%d chunks)",
+                target.protocol, target.model, attempt, max_retries,
                 question_type.value, bloom_level, nb, domain,
                 len(rag_context) if rag_context else 0,
             )
-            with httpx.Client(timeout=settings.ollama_timeout) as client:
-                resp = client.post(
-                    f"{settings.ollama_url}/api/generate",
-                    json=payload,
-                )
-                resp.raise_for_status()
-
-            response_text: str = resp.json().get("response", "")
+            response_text = complete(prompt, SYSTEM_PROMPT_COT)
             logger.debug("Réponse LLM brute (trunc.) : %.300s", response_text)
 
             parsed = _extract_json_from_text(response_text)
@@ -234,13 +219,25 @@ def generate_questions(
             time.sleep(1)
 
         except httpx.TimeoutException:
-            logger.error("Timeout Ollama (tentative %d/%d)", attempt, max_retries)
-            time.sleep(2)
+            # Réessayer après un timeout rejoue le même appel lent et consomme
+            # tout le budget temps de la tâche : on abandonne ce chunk.
+            logger.error("Timeout LLM après %ds — chunk abandonné", target.timeout)
+            return []
         except httpx.HTTPStatusError as exc:
-            logger.error("Erreur HTTP Ollama %s (tentative %d)", exc.response.status_code, attempt)
-            time.sleep(1)
+            code = exc.response.status_code
+            if code in NON_RETRYABLE_HTTP_CODES:
+                # Clé invalide, modèle inconnu, requête refusée : inutile de
+                # réessayer ni de continuer sur les autres chunks.
+                raise LlmConfigError(
+                    f"LLM {target.protocol}:{target.model} a refusé la requête (HTTP {code}) : "
+                    f"{exc.response.text[:300]}"
+                ) from exc
+            logger.error("Erreur HTTP LLM %s (tentative %d)", code, attempt)
+            time.sleep(2 ** attempt)  # 429 / 5xx : laisser le fournisseur respirer
+        except LlmConfigError:
+            raise
         except Exception as exc:
-            logger.error("Erreur inattendue Ollama : %s", exc, exc_info=True)
+            logger.error("Erreur inattendue LLM : %s", exc, exc_info=True)
             time.sleep(1)
 
     logger.error(
@@ -248,6 +245,21 @@ def generate_questions(
         max_retries, question_type.value, bloom_level,
     )
     return []
+
+
+def ping_llm() -> bool:
+    """
+    Vérifie que le fournisseur LLM actif est utilisable.
+
+    En ligne, on valide seulement la configuration : un appel réel serait
+    facturé à chaque health check.
+    """
+    try:
+        target = resolve_target()
+    except LlmConfigError as exc:
+        logger.error("Configuration LLM invalide : %s", exc)
+        return False
+    return True if target.mode == "online" else ping_ollama()
 
 
 def ping_ollama() -> bool:

@@ -184,7 +184,7 @@ export const ListQuizzesResponse = zod.object({
   "description": zod.string().nullish(),
   "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
   "nbQuestions": zod.int(),
-  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED']),
+  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED', 'FAILED']),
   "nlpTaskId": zod.string().nullish(),
   "questions": zod.array(zod.object({
   "id": zod.uuid(),
@@ -238,7 +238,7 @@ export const CreateQuizResponse = zod.object({
   "description": zod.string().nullish(),
   "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
   "nbQuestions": zod.int(),
-  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED']),
+  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED', 'FAILED']),
   "nlpTaskId": zod.string().nullish(),
   "questions": zod.array(zod.object({
   "id": zod.uuid(),
@@ -273,7 +273,7 @@ export const GetQuizResponse = zod.object({
   "description": zod.string().nullish(),
   "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
   "nbQuestions": zod.int(),
-  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED']),
+  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED', 'FAILED']),
   "nlpTaskId": zod.string().nullish(),
   "questions": zod.array(zod.object({
   "id": zod.uuid(),
@@ -333,7 +333,7 @@ export const UpdateQuizQuestionsResponse = zod.object({
   "description": zod.string().nullish(),
   "difficulty": zod.enum(['FACILE', 'MOYEN', 'DIFFICILE']),
   "nbQuestions": zod.int(),
-  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED']),
+  "quizStatus": zod.enum(['DRAFT', 'REVIEWING', 'PUBLISHED', 'ARCHIVED', 'FAILED']),
   "nlpTaskId": zod.string().nullish(),
   "questions": zod.array(zod.object({
   "id": zod.uuid(),

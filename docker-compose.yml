@@ -33,6 +33,7 @@ services:
       retries: 5
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── PostgreSQL (Keycloak — base séparée) ────────────────────────────────────
   keycloak-db:
@@ -51,6 +52,7 @@ services:
       retries: 5
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── Keycloak 25.0 ────────────────────────────────────────────────────────────
   keycloak:
@@ -79,6 +81,7 @@ services:
       retries: 10
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── Redis 7 ─────────────────────────────────────────────────────────────────
   redis:
@@ -96,6 +99,7 @@ services:
       retries: 5
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── MinIO ───────────────────────────────────────────────────────────────────
   minio:
@@ -117,6 +121,7 @@ services:
       retries: 5
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── MinIO Init (crée les buckets au démarrage) ───────────────────────────────
   minio-init:
@@ -139,6 +144,10 @@ services:
   ollama:
     image: ollama/ollama:latest
     container_name: quizgen-ollama
+    # Démarré uniquement en mode offline (COMPOSE_PROFILES=offline dans .env) :
+    # en mode online, le LLM est une API distante et Ollama ne ferait que
+    # consommer la RAM de la VM Docker.
+    profiles: ["offline"]
     volumes:
       - ollama-data:/root/.ollama
     ports:
@@ -151,11 +160,13 @@ services:
       start_period: 20s
     networks:
       - quizgen-net
+    restart: unless-stopped
 
   # ── Ollama Init (télécharge le modèle au premier démarrage) ─────────────────
   ollama-init:
     image: ollama/ollama:latest
     container_name: quizgen-ollama-init
+    profiles: ["offline"]
     environment:
       OLLAMA_HOST: http://ollama:11434
     command: pull ${OLLAMA_MODEL:-mistral}
@@ -234,8 +245,13 @@ services:
       MINIO_URL:        http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
-      OLLAMA_URL:       http://ollama:11434
+      OLLAMA_URL:       ${OLLAMA_URL:-http://ollama:11434}
       OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
+      # Fournisseur LLM : offline (Ollama) ou online (API) — voir .env.example
+      LLM_MODE:         ${LLM_MODE:-offline}
+      LLM_MODEL:        ${LLM_MODEL:-}
+      LLM_API_KEY:      ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-}
       # ChromaDB RAG store — volume partagé avec nlp-worker
       CHROMADB_PATH:    /data/chroma
       RAG_ENABLED:      "true"
@@ -251,6 +267,7 @@ services:
         condition: service_healthy
       ollama-init:
         condition: service_completed_successfully
+        required: false   # absent en mode online (profil offline inactif)
     networks:
       - quizgen-net
     restart: unless-stopped
@@ -261,14 +278,19 @@ services:
       context: ./nlp-service
       dockerfile: Dockerfile
     container_name: quizgen-nlp-worker
-    command: celery -A app.celery_app worker --loglevel=info --concurrency=2 -Q celery
+    command: celery -A app.celery_app worker --loglevel=info --concurrency=1 -Q celery
     environment:
       REDIS_URL:        redis://:${REDIS_PASS:-redis_secret_2025}@redis:6379/0
       MINIO_URL:        http://minio:9000
       MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY:-minioadmin}
       MINIO_SECRET_KEY: ${MINIO_SECRET_KEY:-minio_secret_2025}
-      OLLAMA_URL:       http://ollama:11434
+      OLLAMA_URL:       ${OLLAMA_URL:-http://ollama:11434}
       OLLAMA_MODEL:     ${OLLAMA_MODEL:-mistral}
+      # Fournisseur LLM : offline (Ollama) ou online (API) — voir .env.example
+      LLM_MODE:         ${LLM_MODE:-offline}
+      LLM_MODEL:        ${LLM_MODEL:-}
+      LLM_API_KEY:      ${LLM_API_KEY:-}
+      LLM_API_BASE_URL: ${LLM_API_BASE_URL:-}
       # ChromaDB RAG store — même chemin que nlp-service (volume partagé)
       CHROMADB_PATH:    /data/chroma
       RAG_ENABLED:      "true"
@@ -282,6 +304,7 @@ services:
         condition: service_healthy
       ollama-init:
         condition: service_completed_successfully
+        required: false   # absent en mode online (profil offline inactif)
     networks:
       - quizgen-net
     restart: unless-stopped

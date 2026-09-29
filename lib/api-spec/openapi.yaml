@@ -513,7 +513,7 @@ components:
         description: { type: ["string", "null"] }
         difficulty: { type: string, enum: [FACILE, MOYEN, DIFFICILE] }
         nbQuestions: { type: integer }
-        quizStatus: { type: string, enum: [DRAFT, REVIEWING, PUBLISHED, ARCHIVED] }
+        quizStatus: { type: string, enum: [DRAFT, REVIEWING, PUBLISHED, ARCHIVED, FAILED] }
         nlpTaskId: { type: ["string", "null"] }
         questions: { type: array, items: { $ref: "#/components/schemas/Question" } }
         createdAt: { type: string, format: date-time }

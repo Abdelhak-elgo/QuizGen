@@ -7,15 +7,19 @@ import ma.quizgen.entity.Document;
 import ma.quizgen.entity.Question;
 import ma.quizgen.entity.Quiz;
 import ma.quizgen.entity.User;
+import ma.quizgen.entity.enums.AttemptStatus;
 import ma.quizgen.entity.enums.Difficulty;
 import ma.quizgen.entity.enums.QuestionType;
 import ma.quizgen.entity.enums.QuizStatus;
+import ma.quizgen.entity.enums.Role;
+import ma.quizgen.repository.AttemptRepository;
 import ma.quizgen.repository.DocumentRepository;
 import ma.quizgen.repository.QuestionRepository;
 import ma.quizgen.repository.QuizRepository;
 import ma.quizgen.repository.UserRepository;
 import ma.quizgen.service.NlpServiceClient;
 import ma.quizgen.service.QuizService;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
@@ -23,6 +27,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
+import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
@@ -38,6 +43,16 @@ public class QuizServiceImpl implements QuizService {
     private final DocumentRepository  documentRepository;
     private final UserRepository      userRepository;
     private final NlpServiceClient    nlpClient;
+    private final AttemptRepository   attemptRepository;
+
+    /**
+     * Au-delà de ce délai, une génération sans résultat est considérée perdue
+     * (tâche tuée, résultat Celery expiré, worker redémarré…) et le quiz passe
+     * en FAILED — sinon il resterait DRAFT indéfiniment et bloquerait le document.
+     * Doit couvrir l'attente en file + le time limit Celery (≈ 15 + 21 min).
+     */
+    @Value("${nlp.service.generation-timeout-minutes:40}")
+    private long generationTimeoutMinutes = 40;
 
     // ── helpers ───────────────────────────────────────────────────────────────
 
@@ -64,6 +79,11 @@ public class QuizServiceImpl implements QuizService {
         // document (ex: double-clic, ou nouvel essai pendant qu'une génération
         // précédente tourne encore) — chaque tâche est coûteuse en CPU et fait
         // concurrence aux autres sur le même worker.
+        // Rafraîchit d'abord les générations en cours de ce document : une
+        // génération terminée ou perdue ne doit pas bloquer une nouvelle demande.
+        quizRepository.findByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)
+            .forEach(this::advanceIfNlpDone);
+
         if (quizRepository.existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(doc.getId(), QuizStatus.DRAFT)) {
             throw new ResponseStatusException(HttpStatus.CONFLICT,
                 "Une génération est déjà en cours pour ce document. Veuillez patienter qu'elle se termine.");
@@ -117,20 +137,35 @@ public class QuizServiceImpl implements QuizService {
     @Override
     @Transactional
     public QuizDto getById(UUID quizId, String requesterKeycloakId) {
+        User requester = resolveUser(requesterKeycloakId);
         Quiz quiz = quizRepository.findByIdWithQuestions(quizId)
             .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Quiz introuvable"));
 
-        if (quiz.getQuizStatus() == QuizStatus.DRAFT && quiz.getNlpTaskId() != null) {
-            quiz = advanceIfNlpDone(quiz);
+        boolean isOwner = quiz.getTeacher().getId().equals(requester.getId());
+        if (isOwner || requester.getRole() == Role.ADMIN) {
+            if (quiz.getQuizStatus() == QuizStatus.DRAFT && quiz.getNlpTaskId() != null) {
+                quiz = advanceIfNlpDone(quiz);
+            }
+            return QuizDto.from(quiz);
         }
 
-        return QuizDto.from(quiz);
+        // Étudiant : uniquement un quiz d'une session qu'il a rejointe, et
+        // sans les réponses tant que sa tentative n'est pas soumise.
+        if (requester.getRole() != Role.ETUDIANT
+                || !attemptRepository.existsBySession_Quiz_IdAndStudent_Id(quizId, requester.getId())) {
+            throw new ResponseStatusException(HttpStatus.FORBIDDEN, "Accès à ce quiz non autorisé");
+        }
+        QuizDto dto = QuizDto.from(quiz);
+        boolean hasSubmitted = attemptRepository.existsBySession_Quiz_IdAndStudent_IdAndAttemptStatus(
+            quizId, requester.getId(), AttemptStatus.SUBMITTED);
+        return hasSubmitted ? dto : dto.withoutAnswers();
     }
 
     /**
      * Vérifie l'état de la tâche NLP associée à un quiz en DRAFT et le complète
-     * si la génération est terminée (succès ou échec). Appelé à chaque poll de
-     * GET /quizzes/{id} par le frontend — évite tout blocage de thread HTTP.
+     * si la génération est terminée (succès ou échec), ou le passe en FAILED si
+     * elle dépasse le délai maximal. Appelé à chaque poll de GET /quizzes/{id}
+     * et avant toute nouvelle génération sur le même document.
      */
     private Quiz advanceIfNlpDone(Quiz quiz) {
         NlpTaskStatus status;
@@ -139,21 +174,36 @@ public class QuizServiceImpl implements QuizService {
         } catch (Exception e) {
             log.warn("Statut NLP indisponible pour quiz {} (task_id={}): {}",
                 quiz.getId(), quiz.getNlpTaskId(), e.getMessage());
-            return quiz;
+            return isGenerationOverdue(quiz) ? markFailed(quiz, "service NLP injoignable") : quiz;
         }
 
         if (status.isSuccess()) {
-            quiz.getQuestions().addAll(mapNlpToQuestions(status.result(), quiz));
+            List<Question> questions = mapNlpToQuestions(status.result(), quiz);
+            if (questions.isEmpty()) {
+                return markFailed(quiz, "aucune question exploitable générée");
+            }
+            quiz.getQuestions().addAll(questions);
             quiz.setQuizStatus(QuizStatus.REVIEWING);
             quiz = quizRepository.save(quiz);
             log.info("Quiz {} généré ({} questions)", quiz.getId(), quiz.getQuestions().size());
         } else if (status.isFailure()) {
-            log.error("Génération NLP échouée pour quiz {} (task_id={}): {}",
-                quiz.getId(), quiz.getNlpTaskId(), status.error());
-            quiz.setNlpTaskId(null);
-            quiz = quizRepository.save(quiz);
+            quiz = markFailed(quiz, status.status() + ": " + status.error());
+        } else if (isGenerationOverdue(quiz)) {
+            quiz = markFailed(quiz, "délai dépassé (statut " + status.status() + ")");
         }
         return quiz;
+    }
+
+    private boolean isGenerationOverdue(Quiz quiz) {
+        return quiz.getCreatedAt() != null
+            && quiz.getCreatedAt().plusMinutes(generationTimeoutMinutes).isBefore(LocalDateTime.now());
+    }
+
+    private Quiz markFailed(Quiz quiz, String reason) {
+        log.error("Génération NLP échouée pour quiz {} (task_id={}): {}",
+            quiz.getId(), quiz.getNlpTaskId(), reason);
+        quiz.setQuizStatus(QuizStatus.FAILED);
+        return quizRepository.save(quiz);
     }
 
     @Override

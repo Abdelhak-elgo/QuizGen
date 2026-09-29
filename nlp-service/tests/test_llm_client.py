@@ -212,6 +212,26 @@ class TestGenerateQuestions:
         )
         assert questions == []
 
+    @mock.patch("app.llm_client.httpx.Client")
+    def test_timeout_is_not_retried(self, mock_client_class):
+        import httpx
+
+        mock_client = mock.MagicMock()
+        mock_client.__enter__ = mock.MagicMock(return_value=mock_client)
+        mock_client.__exit__ = mock.MagicMock(return_value=False)
+        mock_client.post.side_effect = httpx.TimeoutException("timeout")
+        mock_client_class.return_value = mock_client
+
+        generate_questions(
+            context="Texte.",
+            keywords=[],
+            question_type=QuestionType.QCM,
+            nb=1,
+            difficulty=Difficulty.MOYEN,
+            max_retries=3,
+        )
+        assert mock_client.post.call_count == 1
+
 
 # ── ping_ollama ───────────────────────────────────────────────────────────────
 

@@ -115,16 +115,16 @@ class DocumentServiceImplTest {
     }
 
     @Test
-    @DisplayName("uploadDocument — rejette un fichier > 50 Mo")
+    @DisplayName("uploadDocument — rejette un fichier > 20 Mo")
     void uploadDocument_shouldReject_oversizedFile() {
-        // 51 Mo
-        byte[] bigContent = new byte[51 * 1024 * 1024];
+        // 21 Mo
+        byte[] bigContent = new byte[21 * 1024 * 1024];
         MockMultipartFile file = new MockMultipartFile(
             "file", "big.pdf", "application/pdf", bigContent);
 
         assertThatThrownBy(() -> documentService.uploadDocument(file))
             .isInstanceOf(IllegalArgumentException.class)
-            .hasMessageContaining("50 Mo");
+            .hasMessageContaining("20 Mo");
     }
 
     // ── deleteDocument ────────────────────────────────────────────────────────

@@ -126,6 +126,7 @@ export const QuizQuizStatus = {
   REVIEWING: 'REVIEWING',
   PUBLISHED: 'PUBLISHED',
   ARCHIVED: 'ARCHIVED',
+  FAILED: 'FAILED',
 } as const;
 
 export interface Quiz {

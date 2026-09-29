@@ -17,7 +17,8 @@ from app.bert_scorer import BertScorer
 from app.celery_app import celery_app
 from app.config import get_settings
 from app.metrics import record_bertscore, record_evidence_retrieved, setup_prometheus
-from app.llm_client import ping_ollama
+from app.llm_client import ping_llm
+from app.llm_providers import describe_target
 from app.models import (
     BatchScoreRequest,
     BatchScoreResponse,
@@ -60,13 +61,13 @@ async def health() -> Dict[str, Any]:
     Retourne :
     - status : "ok" ou "degraded"
     - spacy_model : nom du modèle SpaCy configuré
-    - ollama_available : True si Ollama répond et que le modèle est chargé
+    - llm_available : True si le fournisseur LLM actif est utilisable
+      (offline : Ollama répond avec le modèle ; online : configuration complète)
+    - llm_mode / llm_protocol / llm_model : fournisseur actif (jamais la clé)
     - redis_available : True si Redis est accessible
-    - ollama_model : nom du modèle LLM utilisé
     - bert_score_available : True si bert-score est installé
     """
-    # Ping Ollama
-    ollama_ok = ping_ollama()
+    llm_ok = ping_llm()
 
     # Ping Redis
     redis_ok = False
@@ -81,13 +82,13 @@ async def health() -> Dict[str, Any]:
     scorer = BertScorer.get_instance()
     bert_ok = scorer._check_available()
 
-    overall = "ok" if ollama_ok and redis_ok else "degraded"
+    overall = "ok" if llm_ok and redis_ok else "degraded"
 
     return {
         "status": overall,
         "spacy_model": settings.spacy_model,
-        "ollama_available": ollama_ok,
-        "ollama_model": settings.ollama_model,
+        "llm_available": llm_ok,
+        **describe_target(),
         "redis_available": redis_ok,
         "bert_score_available": bert_ok,
     }
@@ -116,7 +117,12 @@ async def generate(request: GenerateRequest) -> GenerateResponse:
     - **question_types** : Types souhaités (`QCM`, `OUVERTE`, `EXERCICE`)
     - **difficulty** : `FACILE`, `MOYEN` ou `DIFFICILE`
     """
-    task = generate_quiz_task.apply_async(kwargs={"request_dict": request.model_dump()})
+    task = generate_quiz_task.apply_async(
+        kwargs={"request_dict": request.model_dump()},
+        # Une tâche non démarrée après ce délai est révoquée par le worker
+        # (le backend aura déjà marqué le quiz en échec entre-temps).
+        expires=settings.generation_queue_expires,
+    )
     logger.info(
         "Tâche soumise : task_id=%s, document=%s, nb=%d",
         task.id, request.document_id, request.nb_questions,

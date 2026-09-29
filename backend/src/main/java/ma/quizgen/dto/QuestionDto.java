@@ -31,4 +31,9 @@ public record QuestionDto(
             q.getPosition()
         );
     }
+
+    /** Copie sans la réponse ni l'explication (étudiant pendant l'examen). */
+    public QuestionDto withoutAnswer() {
+        return new QuestionDto(id, type, content, options, null, null, difficulty, keywords, position);
+    }
 }

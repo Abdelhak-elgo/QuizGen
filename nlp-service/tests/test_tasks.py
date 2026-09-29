@@ -94,3 +94,18 @@ class TestPlanQuestionDistribution:
         )
 
         assert plan[0][3] is QuestionType.QCM
+
+class TestGetEmbeddingModel:
+    def test_returns_sentence_transformer_not_keybert_backend(self, monkeypatch):
+        # KeyBERT expose un wrapper (.model) sans .encode() ; le pipeline a
+        # besoin du SentenceTransformer sous-jacent (.model.embedding_model).
+        from types import SimpleNamespace
+
+        import app.nlp_pipeline as nlp_pipeline
+        from app.tasks import _get_embedding_model
+
+        sentence_transformer = SimpleNamespace(encode=lambda texts, **_: texts)
+        backend = SimpleNamespace(embedding_model=sentence_transformer)
+        monkeypatch.setattr(nlp_pipeline, "_load_keybert_model", lambda: SimpleNamespace(model=backend))
+
+        assert _get_embedding_model() is sentence_transformer

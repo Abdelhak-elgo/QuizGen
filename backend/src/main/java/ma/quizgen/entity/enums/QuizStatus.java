@@ -4,5 +4,6 @@ public enum QuizStatus {
     DRAFT,       // En cours de génération NLP
     REVIEWING,   // Généré, en attente de validation par l'enseignant
     PUBLISHED,   // Publié et disponible pour les sessions
-    ARCHIVED     // Archivé
+    ARCHIVED,    // Archivé
+    FAILED       // Génération NLP échouée ou abandonnée (délai dépassé)
 }

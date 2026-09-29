@@ -43,4 +43,12 @@ public record QuizDto(
             quiz.getUpdatedAt()
         );
     }
+
+    /** Copie dont les questions ne révèlent ni réponses ni explications. */
+    public QuizDto withoutAnswers() {
+        return new QuizDto(id, documentId, documentName, teacherId, teacherName, title, description,
+            difficulty, nbQuestions, quizStatus, nlpTaskId,
+            questions.stream().map(QuestionDto::withoutAnswer).toList(),
+            createdAt, updatedAt);
+    }
 }

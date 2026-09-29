@@ -13,7 +13,7 @@ public interface DocumentService {
     /**
      * Upload un PDF vers MinIO et persiste les métadonnées en BDD.
      *
-     * @param file fichier PDF (max 50 Mo, type MIME application/pdf)
+     * @param file fichier PDF (max 20 Mo, type MIME application/pdf)
      * @return réponse avec l'ID du document et l'objectKey MinIO
      */
     DocumentUploadResponse uploadDocument(MultipartFile file);

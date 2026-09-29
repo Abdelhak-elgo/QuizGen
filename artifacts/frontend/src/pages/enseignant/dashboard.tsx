@@ -19,7 +19,8 @@ export default function EnseignantDashboard() {
   const getStatusBadge = (status: string) => {
     switch (status) {
       case 'DRAFT': return <Badge variant="secondary">Brouillon</Badge>;
-      case 'REVIEWING': return <Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">En révision</Badge>;
+      case 'FAILED': return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Échec</Badge>;
+      case 'REVIEWING': return<Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">En révision</Badge>;
       case 'PUBLISHED': return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Publié</Badge>;
       case 'ARCHIVED': return <Badge variant="secondary" className="opacity-50">Archivé</Badge>;
       default: return <Badge>{status}</Badge>;

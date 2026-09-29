@@ -27,7 +27,7 @@ import java.util.UUID;
 @RequiredArgsConstructor
 public class DocumentServiceImpl implements DocumentService {
 
-    private static final long   MAX_FILE_SIZE = 50L * 1024 * 1024; // 50 Mo
+    private static final long   MAX_FILE_SIZE = 20L * 1024 * 1024; // 20 Mo — aligné avec spring.servlet.multipart
     private static final String PDF_MIME      = MediaType.APPLICATION_PDF_VALUE;
 
     private final DocumentRepository documentRepository;
@@ -130,7 +130,7 @@ public class DocumentServiceImpl implements DocumentService {
         }
         if (file.getSize() > MAX_FILE_SIZE) {
             throw new IllegalArgumentException(
-                "Fichier trop volumineux (max 50 Mo). Taille reçue: "
+                "Fichier trop volumineux (max 20 Mo). Taille reçue: "
                 + file.getSize() / (1024 * 1024) + " Mo");
         }
         String contentType = file.getContentType();

@@ -1,6 +1,7 @@
 package ma.quizgen.repository;
 
 import ma.quizgen.entity.Attempt;
+import ma.quizgen.entity.enums.AttemptStatus;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -18,6 +19,10 @@ public interface AttemptRepository extends JpaRepository<Attempt, UUID> {
     boolean existsBySession_IdAndStudent_Id(UUID sessionId, UUID studentId);
 
     List<Attempt> findBySession_Id(UUID sessionId);
+
+    boolean existsBySession_Quiz_IdAndStudent_Id(UUID quizId, UUID studentId);
+
+    boolean existsBySession_Quiz_IdAndStudent_IdAndAttemptStatus(UUID quizId, UUID studentId, AttemptStatus status);
 
     @Query("""
         SELECT a FROM Attempt a

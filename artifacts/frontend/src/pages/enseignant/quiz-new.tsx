@@ -49,11 +49,11 @@ export default function QuizNew() {
   
   const [generatingQuizId, setGeneratingQuizId] = useState<string | null>(null);
 
-  // La génération NLP est asynchrone côté serveur (peut prendre plusieurs
-  // minutes : chargement modèle + appels LLM par segment). On limite le
-  // nombre de tentatives pour éviter un spinner infini si la génération
-  // échoue silencieusement (le quiz reste alors en DRAFT côté backend).
-  const MAX_POLL_ATTEMPTS = 200; // ~10 min à 3s d'intervalle
+  // La génération NLP est asynchrone côté serveur (quelques secondes avec un
+  // LLM en ligne, plusieurs minutes avec Ollama sur CPU). Le backend passe le
+  // quiz en FAILED en cas d'échec ou après 40 min sans résultat ; ce plafond
+  // n'est qu'un filet de sécurité côté client.
+  const MAX_POLL_ATTEMPTS = 900; // ~45 min à 3s d'intervalle
   const pollAttemptsRef = useRef(0);
 
   // Poll for completion if we have an ID
@@ -74,7 +74,11 @@ export default function QuizNew() {
   useEffect(() => {
     if (!pollingQuiz) return;
 
-    if (pollingQuiz.quizStatus !== 'DRAFT') {
+    if (pollingQuiz.quizStatus === 'FAILED') {
+      toast.error('La génération du quiz a échoué. Veuillez réessayer.');
+      pollAttemptsRef.current = 0;
+      setGeneratingQuizId(null);
+    } else if (pollingQuiz.quizStatus !== 'DRAFT') {
       toast.success('Génération du quiz terminée !');
       setLocation(`/enseignant/quizzes/${pollingQuiz.id}`);
     } else if (pollAttemptsRef.current >= MAX_POLL_ATTEMPTS) {
@@ -135,8 +139,9 @@ export default function QuizNew() {
           <div className="space-y-2 max-w-md">
             <h2 className="text-2xl font-bold">Génération en cours...</h2>
             <p className="text-muted-foreground">
-              Mistral AI analyse votre document et génère des questions sur mesure. 
-              Cela peut prendre jusqu'à une minute selon la taille du document.
+              L'IA analyse votre document et génère des questions sur mesure.
+              Cela peut prendre de quelques secondes à plusieurs minutes selon
+              la taille du document et le modèle utilisé.
             </p>
           </div>
           <div className="flex items-center gap-2 text-sm text-primary font-medium">

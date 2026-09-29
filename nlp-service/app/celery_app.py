@@ -25,7 +25,12 @@ celery_app.conf.update(
     task_track_started=True,
     result_expires=3600,  # Les résultats expirent après 1h
     worker_prefetch_multiplier=1,  # 1 tâche par worker (génération lourde)
-    task_acks_late=True,           # Acquittement après complétion (fiabilité)
+    # Acquittement à la réception : avec acks_late, une tâche longue interrompue
+    # (OOM, redémarrage du conteneur) était remise en file et rejouée à chaque
+    # redémarrage du worker, sans plus aucun quiz pour en consommer le résultat.
+    # Une génération perdue est détectée côté backend (délai max) et relancée
+    # par l'enseignant.
+    task_acks_late=False,
 )
 
 

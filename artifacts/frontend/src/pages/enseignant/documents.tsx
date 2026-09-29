@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { useListDocuments, useDeleteDocument, getListDocumentsQueryKey, useUploadDocument } from '@workspace/api-client-react';
+import { useListDocuments, useDeleteDocument, getListDocumentsQueryKey, useUploadDocument, ApiError } from '@workspace/api-client-react';
 import { useQueryClient } from '@tanstack/react-query';
 import { EnseignantLayout } from '@/components/layout/enseignant-layout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
@@ -18,6 +18,17 @@ function formatBytes(bytes: number, decimals = 2) {
   const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
   return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
+}
+
+// Le backend renvoie un ProblemDetail ({ title, detail }) : l'afficher plutôt
+// qu'un message générique (taille, type de fichier, etc.).
+function uploadErrorMessage(error: unknown): string {
+  if (error instanceof ApiError) {
+    if (error.status === 413) return 'Fichier trop volumineux. La limite est de 20 MB.';
+    const data = error.data as { detail?: string; title?: string } | null;
+    if (data?.detail) return data.detail;
+  }
+  return 'Erreur lors de l\'upload du document.';
 }
 
 export default function DocumentLibrary() {
@@ -78,7 +89,7 @@ export default function DocumentLibrary() {
       queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
     } catch (error) {
       console.error(error);
-      toast.error('Erreur lors de l\'upload du document.', { id: toastId });
+      toast.error(uploadErrorMessage(error), { id: toastId });
     } finally {
       setUploading(false);
       if (fileInputRef.current) fileInputRef.current.value = '';

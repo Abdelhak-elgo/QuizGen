@@ -77,7 +77,7 @@ public class GlobalExceptionHandler {
     public ProblemDetail handleMaxUploadSize(MaxUploadSizeExceededException ex) {
         ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.PAYLOAD_TOO_LARGE);
         pd.setTitle("Fichier trop volumineux");
-        pd.setDetail("La taille maximale autorisée est 50 Mo.");
+        pd.setDetail("La taille maximale autorisée est 20 Mo.");
         return pd;
     }
 }

@@ -26,6 +26,7 @@ Avantage vs v1 :
   - L'answerability check élimine les hallucinations avant stockage
 """
 import logging
+import time
 from typing import Any, Dict, List, Optional, Tuple
 
 from celery import Task
@@ -37,6 +38,7 @@ from app.bloom_classifier import (
     get_domain_prompt_suffix,
 )
 from app.celery_app import celery_app
+from app.config import get_settings
 from app.llm_client import generate_questions
 from app.minio_client import download_pdf
 from app.models import Difficulty, GenerateRequest, GeneratedQuestion, QuestionType
@@ -47,6 +49,7 @@ from app.rag_store import index_document, retrieve_context
 from app.semantic_chunker import SemanticChunk, chunk_text_semantically
 
 logger = logging.getLogger(__name__)
+settings = get_settings()
 
 
 class QuizGenerationTask(Task):
@@ -67,8 +70,8 @@ class QuizGenerationTask(Task):
     base=QuizGenerationTask,
     name="quizgen.generate_quiz",
     max_retries=0,
-    soft_time_limit=600,
-    time_limit=660,
+    soft_time_limit=settings.generation_soft_time_limit,
+    time_limit=settings.generation_time_limit,
 )
 def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -> Dict[str, Any]:
     """
@@ -186,9 +189,21 @@ def generate_quiz_task(self: QuizGenerationTask, request_dict: Dict[str, Any]) -
         "questions_rejected": 0,
     }
 
+    llm_started_at = time.monotonic()
+
     for step_idx, (chunk_idx, chunk, bloom, q_type, nb, diff) in enumerate(distribution):
         if nb == 0:
             continue
+
+        # Rendre un quiz partiel plutôt que se faire tuer par le time limit
+        # Celery (qui perdrait toutes les questions déjà générées).
+        if time.monotonic() - llm_started_at > settings.generation_llm_budget:
+            logger.warning(
+                "Budget LLM (%ds) épuisé après %d/%d segments — arrêt avec %d question(s).",
+                settings.generation_llm_budget, step_idx, total_steps, len(all_questions),
+            )
+            pipeline_stats["budget_exhausted"] = True
+            break
 
         # Progression 30% → 85% répartie sur les étapes de génération
         progress = 30 + int((step_idx / max(total_steps, 1)) * 55)
@@ -302,8 +317,9 @@ def _get_embedding_model():
     try:
         from app.nlp_pipeline import _load_keybert_model
         kw_model = _load_keybert_model()
-        # L'objet KeyBERT expose le modèle via .model
-        return kw_model.model
+        # kw_model.model est le wrapper SentenceTransformerBackend de KeyBERT
+        # (pas de .encode()) — le SentenceTransformer réel est .embedding_model.
+        return kw_model.model.embedding_model
     except Exception as exc:
         logger.warning("Impossible de récupérer le modèle d'embeddings : %s", exc)
         return None

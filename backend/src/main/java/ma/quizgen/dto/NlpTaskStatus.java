@@ -16,6 +16,7 @@ public record NlpTaskStatus(
     String error
 ) {
     public boolean isSuccess() { return "SUCCESS".equals(status); }
-    public boolean isFailure() { return "FAILURE".equals(status); }
+    /** REVOKED : tâche expirée en file (jamais démarrée) — traitée comme un échec. */
+    public boolean isFailure() { return "FAILURE".equals(status) || "REVOKED".equals(status); }
     public boolean isDone()    { return isSuccess() || isFailure(); }
 }
