@@ -350,6 +350,21 @@ paths:
               schema:
                 $ref: "#/components/schemas/Session"
 
+  /sessions/{id}/results:
+    get:
+      operationId: getSessionResults
+      tags: [sessions]
+      summary: Résultats de la session — statut, score et copie de chaque étudiant (enseignant)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Session results
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/SessionResults"
+
   /sessions/{id}/join:
     post:
       operationId: joinSession
@@ -413,6 +428,36 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/Attempt"
+
+  /attempts/{id}/review:
+    get:
+      operationId: getAttemptReview
+      tags: [attempts]
+      summary: Copie corrigée question par question (enseignant de la session)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Attempt review
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AttemptReview"
+
+  /attempts/{id}/recommendation:
+    post:
+      operationId: generateRecommendation
+      tags: [attempts]
+      summary: Générer le diagnostic pédagogique IA d'une copie soumise (enseignant)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: string, format: uuid } }
+      responses:
+        "200":
+          description: Recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/Recommendation"
 
   /attempts/{id}/submit:
     post:
@@ -702,6 +747,99 @@ components:
         accessCode: { type: ["string", "null"] }
 
     # ── Attempts ───────────────────────────────────────────────────────────
+    SessionResults:
+      type: object
+      required: [sessionId, quizId, quizTitle, nbQuestions, sessionStatus, startTime, endTime, summary, students]
+      properties:
+        sessionId: { type: string, format: uuid }
+        quizId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        nbQuestions: { type: integer }
+        sessionStatus: { type: string, enum: [SCHEDULED, OPEN, CLOSED, CANCELLED] }
+        startTime: { type: string, format: date-time }
+        endTime: { type: string, format: date-time }
+        summary: { $ref: "#/components/schemas/SessionResultsSummary" }
+        students: { type: array, items: { $ref: "#/components/schemas/StudentResult" } }
+
+    SessionResultsSummary:
+      type: object
+      required: [totalStudents, notStarted, inProgress, submitted]
+      properties:
+        totalStudents: { type: integer }
+        notStarted: { type: integer }
+        inProgress: { type: integer }
+        submitted: { type: integer }
+        averagePercent: { type: ["number", "null"] }
+        passRate: { type: ["number", "null"] }
+
+    StudentResult:
+      type: object
+      required: [studentId, email, assigned, status, hasRecommendation]
+      properties:
+        studentId: { type: string, format: uuid }
+        firstName: { type: ["string", "null"] }
+        lastName: { type: ["string", "null"] }
+        email: { type: string }
+        assigned: { type: boolean }
+        status: { type: string, enum: [NOT_STARTED, IN_PROGRESS, SUBMITTED, EXPIRED] }
+        attemptId: { type: ["string", "null"], format: uuid }
+        score: { type: ["integer", "null"] }
+        maxScore: { type: ["integer", "null"] }
+        percent: { type: ["number", "null"] }
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        hasRecommendation: { type: boolean }
+
+    AttemptReview:
+      type: object
+      required: [attemptId, sessionId, quizId, quizTitle, studentId, studentName, studentEmail, attemptStatus, questions]
+      properties:
+        attemptId: { type: string, format: uuid }
+        sessionId: { type: string, format: uuid }
+        quizId: { type: string, format: uuid }
+        quizTitle: { type: string }
+        studentId: { type: string, format: uuid }
+        studentName: { type: string }
+        studentEmail: { type: string }
+        attemptStatus: { type: string, enum: [IN_PROGRESS, SUBMITTED, EXPIRED] }
+        score: { type: ["integer", "null"] }
+        maxScore: { type: ["integer", "null"] }
+        percent: { type: ["number", "null"] }
+        startedAt: { type: ["string", "null"], format: date-time }
+        completedAt: { type: ["string", "null"], format: date-time }
+        questions: { type: array, items: { $ref: "#/components/schemas/QuestionReview" } }
+        recommendation:
+          oneOf:
+            - { $ref: "#/components/schemas/Recommendation" }
+            - { type: "null" }
+
+    QuestionReview:
+      type: object
+      required: [questionId, position, type, content, correctAnswer, outcome]
+      properties:
+        questionId: { type: string, format: uuid }
+        position: { type: integer }
+        type: { type: string, enum: [QCM, OUVERTE, EXERCICE] }
+        content: { type: string }
+        options: { type: ["array", "null"], items: { type: string } }
+        correctAnswer: { type: string }
+        studentAnswer: { type: ["string", "null"] }
+        outcome: { type: string, enum: [CORRECT, PARTIAL, INCORRECT, UNANSWERED, UNGRADED] }
+        partialScore: { type: ["number", "null"] }
+        explanation: { type: ["string", "null"] }
+
+    Recommendation:
+      type: object
+      required: [summary, strengths, weaknesses, focusAreas, actions]
+      properties:
+        summary: { type: string }
+        strengths: { type: array, items: { type: string } }
+        weaknesses: { type: array, items: { type: string } }
+        focusAreas: { type: array, items: { type: string } }
+        actions: { type: array, items: { type: string } }
+        model: { type: ["string", "null"] }
+        generatedAt: { type: ["string", "null"], format: date-time }
+
     Attempt:
       type: object
       required: [id, sessionId, studentId, attemptStatus]

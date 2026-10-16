@@ -23,6 +23,7 @@ import type {
   AssignedSession,
   Attempt,
   AttemptPage,
+  AttemptReview,
   AttemptSubmit,
   Document,
   DocumentPage,
@@ -40,11 +41,13 @@ import type {
   QuizInput,
   QuizPage,
   QuizQuestionsUpdate,
+  Recommendation,
   Session,
   SessionInput,
   SessionJoin,
   SessionPage,
   SessionParticipantsInput,
+  SessionResults,
   StudentDashboard,
   User,
   UserPage
@@ -1672,6 +1675,83 @@ export function useGetSession<TData = Awaited<ReturnType<typeof getSession>>, TE
 
 
 
+export const getGetSessionResultsUrl = (id: string,) => {
+
+
+
+
+  return `/sessions/${id}/results`
+}
+
+/**
+ * @summary Résultats de la session — statut, score et copie de chaque étudiant (enseignant)
+ */
+export const getSessionResults = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<SessionResults> => {
+
+  return customFetch<SessionResults>(getGetSessionResultsUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetSessionResultsQueryKey = (id: string,) => {
+    return [
+    `/sessions/${id}/results`
+    ] as const;
+    }
+
+
+export const getGetSessionResultsQueryOptions = <TData = Awaited<ReturnType<typeof getSessionResults>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionResults>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetSessionResultsQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getSessionResults>>> = ({ signal }) => getSessionResults(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getSessionResults>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetSessionResultsQueryResult = NonNullable<Awaited<ReturnType<typeof getSessionResults>>>
+export type GetSessionResultsQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Résultats de la session — statut, score et copie de chaque étudiant (enseignant)
+ */
+
+export function useGetSessionResults<TData = Awaited<ReturnType<typeof getSessionResults>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getSessionResults>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetSessionResultsQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
 export const getJoinSessionUrl = (id: string,) => {
 
 
@@ -1975,6 +2055,154 @@ export function useGetAttempt<TData = Awaited<ReturnType<typeof getAttempt>>, TE
 
 
 
+
+export const getGetAttemptReviewUrl = (id: string,) => {
+
+
+
+
+  return `/attempts/${id}/review`
+}
+
+/**
+ * @summary Copie corrigée question par question (enseignant de la session)
+ */
+export const getAttemptReview = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<AttemptReview> => {
+
+  return customFetch<AttemptReview>(getGetAttemptReviewUrl(id),
+  {
+    ...options,
+    method: 'GET'
+
+
+  }
+);}
+
+
+
+
+
+export const getGetAttemptReviewQueryKey = (id: string,) => {
+    return [
+    `/attempts/${id}/review`
+    ] as const;
+    }
+
+
+export const getGetAttemptReviewQueryOptions = <TData = Awaited<ReturnType<typeof getAttemptReview>>, TError = ErrorType<unknown>>(id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttemptReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getGetAttemptReviewQueryKey(id);
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof getAttemptReview>>> = ({ signal }) => getAttemptReview(id, { signal, ...requestOptions });
+
+
+
+
+
+   return  { queryKey, queryFn, enabled: id !== null && id !== undefined, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof getAttemptReview>>, TError, TData> & { queryKey: QueryKey }
+}
+
+export type GetAttemptReviewQueryResult = NonNullable<Awaited<ReturnType<typeof getAttemptReview>>>
+export type GetAttemptReviewQueryError = ErrorType<unknown>
+
+
+/**
+ * @summary Copie corrigée question par question (enseignant de la session)
+ */
+
+export function useGetAttemptReview<TData = Awaited<ReturnType<typeof getAttemptReview>>, TError = ErrorType<unknown>>(
+ id: string, options?: { query?:UseQueryOptions<Awaited<ReturnType<typeof getAttemptReview>>, TError, TData>, request?: SecondParameter<typeof customFetch>}
+
+ ):  UseQueryResult<TData, TError> & { queryKey: QueryKey } {
+
+  const queryOptions = getGetAttemptReviewQueryOptions(id,options)
+
+  const query = useQuery(queryOptions) as  UseQueryResult<TData, TError> & { queryKey: QueryKey };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+
+export const getGenerateRecommendationUrl = (id: string,) => {
+
+
+
+
+  return `/attempts/${id}/recommendation`
+}
+
+/**
+ * @summary Générer le diagnostic pédagogique IA d'une copie soumise (enseignant)
+ */
+export const generateRecommendation = async (id: string, options?: Parameters<typeof customFetch>[1]): Promise<Recommendation> => {
+
+  return customFetch<Recommendation>(getGenerateRecommendationUrl(id),
+  {
+    ...options,
+    method: 'POST'
+
+
+  }
+);}
+
+
+
+
+
+export const getGenerateRecommendationMutationOptions = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateRecommendation>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+): UseMutationOptions<Awaited<ReturnType<typeof generateRecommendation>>, TError,{id: string}, TContext> => {
+
+const mutationKey = ['generateRecommendation'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof generateRecommendation>>, {id: string}> = (props) => {
+          const {id} = props ?? {};
+
+          return  generateRecommendation(id,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type GenerateRecommendationMutationResult = NonNullable<Awaited<ReturnType<typeof generateRecommendation>>>
+
+    export type GenerateRecommendationMutationError = ErrorType<unknown>
+
+    /**
+ * @summary Générer le diagnostic pédagogique IA d'une copie soumise (enseignant)
+ */
+export const useGenerateRecommendation = <TError = ErrorType<unknown>,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof generateRecommendation>>, TError,{id: string}, TContext>, request?: SecondParameter<typeof customFetch>}
+ ): UseMutationResult<
+        Awaited<ReturnType<typeof generateRecommendation>>,
+        TError,
+        {id: string},
+        TContext
+      > => {
+      return useMutation(getGenerateRecommendationMutationOptions(options));
+    }
 
 export const getSubmitAttemptUrl = (id: string,) => {
 

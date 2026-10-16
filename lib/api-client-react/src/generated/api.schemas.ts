@@ -329,6 +329,154 @@ export interface SessionJoin {
   accessCode?: string | null;
 }
 
+export type SessionResultsSessionStatus = typeof SessionResultsSessionStatus[keyof typeof SessionResultsSessionStatus];
+
+
+export const SessionResultsSessionStatus = {
+  SCHEDULED: 'SCHEDULED',
+  OPEN: 'OPEN',
+  CLOSED: 'CLOSED',
+  CANCELLED: 'CANCELLED',
+} as const;
+
+export interface SessionResultsSummary {
+  totalStudents: number;
+  notStarted: number;
+  inProgress: number;
+  submitted: number;
+  /** @nullable */
+  averagePercent?: number | null;
+  /** @nullable */
+  passRate?: number | null;
+}
+
+export type StudentResultStatus = typeof StudentResultStatus[keyof typeof StudentResultStatus];
+
+
+export const StudentResultStatus = {
+  NOT_STARTED: 'NOT_STARTED',
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export interface StudentResult {
+  studentId: string;
+  /** @nullable */
+  firstName?: string | null;
+  /** @nullable */
+  lastName?: string | null;
+  email: string;
+  assigned: boolean;
+  status: StudentResultStatus;
+  /** @nullable */
+  attemptId?: string | null;
+  /** @nullable */
+  score?: number | null;
+  /** @nullable */
+  maxScore?: number | null;
+  /** @nullable */
+  percent?: number | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  hasRecommendation: boolean;
+}
+
+export interface SessionResults {
+  sessionId: string;
+  quizId: string;
+  quizTitle: string;
+  nbQuestions: number;
+  sessionStatus: SessionResultsSessionStatus;
+  startTime: string;
+  endTime: string;
+  summary: SessionResultsSummary;
+  students: StudentResult[];
+}
+
+export type AttemptReviewAttemptStatus = typeof AttemptReviewAttemptStatus[keyof typeof AttemptReviewAttemptStatus];
+
+
+export const AttemptReviewAttemptStatus = {
+  IN_PROGRESS: 'IN_PROGRESS',
+  SUBMITTED: 'SUBMITTED',
+  EXPIRED: 'EXPIRED',
+} as const;
+
+export type QuestionReviewType = typeof QuestionReviewType[keyof typeof QuestionReviewType];
+
+
+export const QuestionReviewType = {
+  QCM: 'QCM',
+  OUVERTE: 'OUVERTE',
+  EXERCICE: 'EXERCICE',
+} as const;
+
+export type QuestionReviewOutcome = typeof QuestionReviewOutcome[keyof typeof QuestionReviewOutcome];
+
+
+export const QuestionReviewOutcome = {
+  CORRECT: 'CORRECT',
+  PARTIAL: 'PARTIAL',
+  INCORRECT: 'INCORRECT',
+  UNANSWERED: 'UNANSWERED',
+  UNGRADED: 'UNGRADED',
+} as const;
+
+export interface QuestionReview {
+  questionId: string;
+  position: number;
+  type: QuestionReviewType;
+  content: string;
+  /** @nullable */
+  options?: string[] | null;
+  correctAnswer: string;
+  /** @nullable */
+  studentAnswer?: string | null;
+  outcome: QuestionReviewOutcome;
+  /** @nullable */
+  partialScore?: number | null;
+  /** @nullable */
+  explanation?: string | null;
+}
+
+export interface Recommendation {
+  summary: string;
+  strengths: string[];
+  weaknesses: string[];
+  focusAreas: string[];
+  actions: string[];
+  /** @nullable */
+  model?: string | null;
+  /** @nullable */
+  generatedAt?: string | null;
+}
+
+export interface AttemptReview {
+  attemptId: string;
+  sessionId: string;
+  quizId: string;
+  quizTitle: string;
+  studentId: string;
+  studentName: string;
+  studentEmail: string;
+  attemptStatus: AttemptReviewAttemptStatus;
+  /** @nullable */
+  score?: number | null;
+  /** @nullable */
+  maxScore?: number | null;
+  /** @nullable */
+  percent?: number | null;
+  /** @nullable */
+  startedAt?: string | null;
+  /** @nullable */
+  completedAt?: string | null;
+  questions: QuestionReview[];
+  recommendation?: Recommendation | null;
+}
+
 /**
  * @nullable
  */

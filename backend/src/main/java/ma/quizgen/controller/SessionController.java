@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.quizgen.dto.*;
 import ma.quizgen.security.CurrentUser;
+import ma.quizgen.service.ResultsService;
 import ma.quizgen.service.SessionService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
@@ -27,6 +28,7 @@ import java.util.UUID;
 public class SessionController {
 
     private final SessionService sessionService;
+    private final ResultsService resultsService;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -72,6 +74,15 @@ public class SessionController {
     @Operation(summary = "Sessions auxquelles l'étudiant connecté est assigné")
     public List<AssignedSessionDto> listAssigned(@AuthenticationPrincipal Jwt jwt) {
         return sessionService.listAssignedToStudent(CurrentUser.getKeycloakId(jwt));
+    }
+
+    @GetMapping("/{id}/results")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Résultats de la session : statut, score et copie de chaque étudiant")
+    public SessionResultsDto results(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return resultsService.sessionResults(id, CurrentUser.getKeycloakId(jwt));
     }
 
     @PutMapping("/{id}/participants")

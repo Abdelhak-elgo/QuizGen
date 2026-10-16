@@ -14,6 +14,9 @@ import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 import { toast } from 'sonner';
 import { SessionParticipantsCard } from '@/components/session/session-participants-card';
+import { SessionResultsCard } from '@/components/session/session-results-card';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { apiErrorMessage } from '@/lib/api-error';
 
 export default function SessionDetail() {
   const [match, params] = useRoute('/enseignant/sessions/:id');
@@ -30,15 +33,14 @@ export default function SessionDetail() {
   const cancelSession = useCancelSession();
 
   const handleCancel = async () => {
-    if (!confirm('Êtes-vous sûr de vouloir annuler cette session ? Les étudiants ne pourront plus y participer.')) return;
-    
     try {
       await cancelSession.mutateAsync({ id: sessionId });
-      queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
-      toast.success('Session annulée.');
     } catch (e) {
-      toast.error('Erreur lors de l\'annulation');
+      toast.error(apiErrorMessage(e, 'Erreur lors de l\'annulation'));
+      throw e; // garde la boîte de confirmation ouverte
     }
+    queryClient.invalidateQueries({ queryKey: getGetSessionQueryKey(sessionId) });
+    toast.success('Session annulée.');
   };
 
   if (!match) return null;
@@ -66,7 +68,7 @@ export default function SessionDetail() {
 
   return (
     <EnseignantLayout>
-      <div className="max-w-4xl mx-auto space-y-6">
+      <div className="max-w-5xl mx-auto space-y-6">
         <div className="flex items-center gap-3">
           <Button variant="ghost" size="icon" onClick={() => window.history.back()}>
             <ArrowLeft size={20} />
@@ -164,21 +166,32 @@ export default function SessionDetail() {
                   </Button>
                   
                   {canCancel && (
-                    <Button 
-                      variant="destructive" 
-                      className="w-full bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200" 
-                      onClick={handleCancel}
-                      disabled={cancelSession.isPending}
-                    >
-                      <Ban size={16} className="mr-2" />
-                      {cancelSession.isPending ? 'Annulation...' : 'Annuler la session'}
-                    </Button>
+                    <ConfirmDialog
+                      title="Annuler cette session ?"
+                      description="Les étudiants ne pourront plus y participer. Les copies déjà rendues sont conservées."
+                      confirmLabel="Annuler la session"
+                      cancelLabel="Retour"
+                      destructive
+                      onConfirm={handleCancel}
+                      trigger={
+                        <Button
+                          variant="destructive"
+                          className="w-full bg-red-50 text-red-600 hover:bg-red-100 hover:text-red-700 border-red-200"
+                          disabled={cancelSession.isPending}
+                        >
+                          <Ban size={16} className="mr-2" />
+                          Annuler la session
+                        </Button>
+                      }
+                    />
                   )}
                 </div>
               </CardContent>
             </Card>
           </div>
         </div>
+
+        <SessionResultsCard sessionId={sessionId} isLive={session.sessionStatus === 'OPEN'} />
       </div>
     </EnseignantLayout>
   );

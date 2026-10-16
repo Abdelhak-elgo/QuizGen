@@ -21,17 +21,7 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Separator } from '@/components/ui/separator';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-  AlertDialogTrigger,
-} from '@/components/ui/alert-dialog';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 import { toast } from 'sonner';
 import {
   ArrowLeft,
@@ -242,7 +232,7 @@ export default function QuizEditor() {
   }
 
   function handlePublish() {
-    publishMutation.mutate({ id: quizId, data: { questions: toPayload(questions), publish: true } });
+    return publishMutation.mutateAsync({ id: quizId, data: { questions: toPayload(questions), publish: true } });
   }
 
   const quizTitle = quiz.title ?? 'quiz';
@@ -301,60 +291,41 @@ export default function QuizEditor() {
             </Button>
 
             {!isPublished && (
-              <AlertDialog>
-                <AlertDialogTrigger asChild>
+              <ConfirmDialog
+                title="Publier ce quiz ?"
+                description="Une fois publié, le quiz sera visible par les étudiants lors des sessions. Vous pourrez toujours modifier les questions après publication."
+                confirmLabel="Publier"
+                onConfirm={handlePublish}
+                trigger={
                   <Button size="sm" disabled={publishMutation.isPending || isGenerating || questions.length === 0}>
-                    {publishMutation.isPending
-                      ? <Loader2 size={15} className="animate-spin mr-1.5" />
-                      : <Send size={15} className="mr-1.5" />}
+                    <Send size={15} className="mr-1.5" />
                     Publier le quiz
                   </Button>
-                </AlertDialogTrigger>
-                <AlertDialogContent>
-                  <AlertDialogHeader>
-                    <AlertDialogTitle>Publier ce quiz ?</AlertDialogTitle>
-                    <AlertDialogDescription>
-                      Une fois publié, le quiz sera visible par les étudiants lors des sessions.
-                      Vous pourrez toujours modifier les questions après publication.
-                    </AlertDialogDescription>
-                  </AlertDialogHeader>
-                  <AlertDialogFooter>
-                    <AlertDialogCancel>Annuler</AlertDialogCancel>
-                    <AlertDialogAction onClick={handlePublish}>Publier</AlertDialogAction>
-                  </AlertDialogFooter>
-                </AlertDialogContent>
-              </AlertDialog>
+                }
+              />
             )}
 
-            <AlertDialog>
-              <AlertDialogTrigger asChild>
-                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                  disabled={deleteMutation.isPending} title="Supprimer le quiz">
-                  {deleteMutation.isPending ? <Loader2 size={15} className="animate-spin" /> : <Trash2 size={15} />}
-                </Button>
-              </AlertDialogTrigger>
-              <AlertDialogContent>
-                <AlertDialogHeader>
-                  <AlertDialogTitle>Supprimer ce quiz ?</AlertDialogTitle>
-                  <AlertDialogDescription>
-                    {isGenerating
-                      ? 'La génération en cours sera abandonnée. '
-                      : ''}
+            <ConfirmDialog
+              title="Supprimer ce quiz ?"
+              description={
+                <>
+                  {isGenerating && <p className="mb-1">La génération en cours sera abandonnée.</p>}
+                  <p>
                     Le quiz et ses questions seront définitivement supprimés. Un quiz déjà utilisé
                     par une session ne peut pas être supprimé.
-                  </AlertDialogDescription>
-                </AlertDialogHeader>
-                <AlertDialogFooter>
-                  <AlertDialogCancel>Annuler</AlertDialogCancel>
-                  <AlertDialogAction
-                    className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
-                    onClick={() => deleteMutation.mutate({ id: quizId })}
-                  >
-                    Supprimer
-                  </AlertDialogAction>
-                </AlertDialogFooter>
-              </AlertDialogContent>
-            </AlertDialog>
+                  </p>
+                </>
+              }
+              confirmLabel="Supprimer"
+              destructive
+              onConfirm={() => deleteMutation.mutateAsync({ id: quizId })}
+              trigger={
+                <Button size="sm" variant="ghost" className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                  disabled={deleteMutation.isPending} title="Supprimer le quiz">
+                  <Trash2 size={15} />
+                </Button>
+              }
+            />
           </div>
         </div>
 

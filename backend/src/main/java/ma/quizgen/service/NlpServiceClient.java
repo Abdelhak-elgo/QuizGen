@@ -1,7 +1,10 @@
 package ma.quizgen.service;
 
 import ma.quizgen.dto.NlpGenerateRequest;
+import ma.quizgen.dto.NlpRecommendationRequest;
 import ma.quizgen.dto.NlpTaskStatus;
+
+import java.util.Map;
 
 public interface NlpServiceClient {
 
@@ -22,6 +25,13 @@ public interface NlpServiceClient {
      * inutiles. Au mieux : un échec est journalisé, jamais propagé.
      */
     void cancelGeneration(String taskId);
+
+    /**
+     * Diagnostic pédagogique d'une copie corrigée (appel LLM synchrone).
+     * @return réponse brute du microservice (clés snake_case)
+     * @throws IllegalStateException si le microservice ou le LLM échoue (message exploitable)
+     */
+    Map<String, Object> requestRecommendation(NlpRecommendationRequest request);
 
     /**
      * Soumet et attend (polling) la fin de la génération.

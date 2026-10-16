@@ -94,3 +94,41 @@ class BatchScoreResponse(BaseModel):
     results: List[ScoreResponse]
     total_items: int
     available: bool = Field(..., description="True si bert-score est installé")
+
+
+# ── Recommandations pédagogiques ──────────────────────────────────────────────
+
+class AnswerOutcome(str, Enum):
+    CORRECT = "CORRECT"
+    PARTIAL = "PARTIAL"
+    INCORRECT = "INCORRECT"
+    UNANSWERED = "UNANSWERED"
+    UNGRADED = "UNGRADED"  # réponse ouverte non corrigée automatiquement (BERTScore indisponible)
+
+
+class RecommendationItem(BaseModel):
+    """Une question de la copie, telle que corrigée."""
+    question: str
+    type: QuestionType
+    correct_answer: str
+    student_answer: Optional[str] = None
+    outcome: AnswerOutcome
+    explanation: Optional[str] = None
+
+
+class RecommendationRequest(BaseModel):
+    """Copie anonymisée d'un étudiant (aucune donnée nominative)."""
+    quiz_title: str
+    score: float = Field(..., ge=0)
+    max_score: int = Field(..., ge=1)
+    items: List[RecommendationItem] = Field(..., min_length=1, max_length=50)
+
+
+class Recommendation(BaseModel):
+    """Diagnostic pédagogique destiné à l'enseignant."""
+    summary: str
+    strengths: List[str] = Field(default_factory=list)
+    weaknesses: List[str] = Field(default_factory=list)
+    focus_areas: List[str] = Field(default_factory=list)
+    actions: List[str] = Field(default_factory=list)
+    model: Optional[str] = None

@@ -74,4 +74,12 @@ public class Attempt {
 
     @Column(name = "completed_at")
     private LocalDateTime completedAt;
+
+    /** Diagnostic pédagogique généré par LLM pour l'enseignant (null tant qu'il n'est pas demandé). */
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(columnDefinition = "jsonb")
+    private Map<String, Object> recommendation;
+
+    @Column(name = "recommendation_generated_at")
+    private LocalDateTime recommendationGeneratedAt;
 }

@@ -44,7 +44,8 @@ export default function Historique() {
             ) : (
               <div className="divide-y">
                 {attempts.map(attempt => {
-                  const isSuccess = (attempt.scorePercent || 0) >= 0.6;
+                  // scorePercent est déjà un pourcentage (0–100)
+                  const isSuccess = (attempt.scorePercent || 0) >= 60;
                   const isSubmitted = attempt.attemptStatus === 'SUBMITTED';
                   
                   return (
@@ -62,7 +63,7 @@ export default function Historique() {
                         {isSubmitted ? (
                           <div className={`flex flex-col items-end`}>
                             <span className={`text-xl font-bold tracking-tighter ${isSuccess ? 'text-green-600' : 'text-red-600'}`}>
-                              {Math.round((attempt.scorePercent || 0) * 100)}%
+                              {Math.round(attempt.scorePercent || 0)}%
                             </span>
                             <span className="text-xs font-medium text-muted-foreground">
                               {attempt.score} / {attempt.maxScore} pts

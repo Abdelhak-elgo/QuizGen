@@ -1,12 +1,17 @@
 package ma.quizgen.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import ma.quizgen.dto.NlpGenerateRequest;
+import ma.quizgen.dto.NlpRecommendationRequest;
 import ma.quizgen.dto.NlpTaskStatus;
 import ma.quizgen.service.NlpServiceClient;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
 import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
@@ -18,6 +23,7 @@ import java.util.Map;
 public class NlpServiceClientImpl implements NlpServiceClient {
 
     private final RestTemplate restTemplate;
+    private final ObjectMapper objectMapper;
 
     @Value("${nlp.service.url:http://nlp-service:8000}")
     private String nlpBaseUrl;
@@ -68,6 +74,34 @@ public class NlpServiceClientImpl implements NlpServiceClient {
         } catch (RestClientException e) {
             log.warn("Annulation de la tâche NLP {} impossible : {}", taskId, e.getMessage());
         }
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public Map<String, Object> requestRecommendation(NlpRecommendationRequest request) {
+        String url = nlpBaseUrl + "/recommendations";
+        try {
+            Map<String, Object> response = restTemplate.postForObject(url, request, Map.class);
+            if (response == null) {
+                throw new IllegalStateException("Réponse vide du microservice NLP");
+            }
+            return response;
+        } catch (HttpStatusCodeException e) {
+            // Le microservice renvoie { "detail": "…" } : le transmettre à l'enseignant
+            throw new IllegalStateException(nlpDetail(e), e);
+        } catch (RestClientException e) {
+            throw new IllegalStateException("Microservice NLP injoignable : " + e.getMessage(), e);
+        }
+    }
+
+    private String nlpDetail(HttpStatusCodeException e) {
+        try {
+            JsonNode detail = objectMapper.readTree(e.getResponseBodyAsString()).path("detail");
+            if (detail.isTextual() && !detail.asText().isBlank()) return detail.asText();
+        } catch (JsonProcessingException ignored) {
+            // corps non JSON : message générique ci-dessous
+        }
+        return "Erreur du microservice NLP (HTTP " + e.getStatusCode().value() + ")";
     }
 
     @Override

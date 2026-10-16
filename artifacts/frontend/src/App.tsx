@@ -1,7 +1,9 @@
 import { type ReactNode } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { ErrorBoundary } from '@/components/error-boundary';
-import { Toaster } from '@/components/ui/toaster';
+// Système de notifications unique : `toast` de sonner (utilisé par toutes les
+// pages). Son Toaster doit être monté, sinon les messages restent invisibles.
+import { Toaster } from '@/components/ui/sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
 import { Route, Switch, useLocation, Router as WouterRouter } from 'wouter';
 
@@ -25,6 +27,7 @@ import SessionsList from '@/pages/enseignant/sessions';
 import SessionNew from '@/pages/enseignant/session-new';
 import SessionDetail from '@/pages/enseignant/session-detail';
 import Analytics from '@/pages/enseignant/analytics';
+import AttemptReviewPage from '@/pages/enseignant/attempt-review';
 
 // Etudiant Pages
 import EtudiantDashboard from '@/pages/etudiant/dashboard';
@@ -69,6 +72,9 @@ function Router() {
         <Route path="/enseignant/sessions/:id">
           <EnseignantGuard><SyncUserGuard><SessionDetail /></SyncUserGuard></EnseignantGuard>
         </Route>
+        <Route path="/enseignant/copies/:attemptId">
+          <EnseignantGuard><SyncUserGuard><AttemptReviewPage /></SyncUserGuard></EnseignantGuard>
+        </Route>
         <Route path="/enseignant/analytics/:quizId">
           <EnseignantGuard><SyncUserGuard><Analytics /></SyncUserGuard></EnseignantGuard>
         </Route>
@@ -110,7 +116,7 @@ function App() {
             <Router />
           </AuthProvider>
         </WouterRouter>
-        <Toaster />
+        <Toaster position="top-right" richColors closeButton />
       </TooltipProvider>
     </QueryClientProvider>
   );

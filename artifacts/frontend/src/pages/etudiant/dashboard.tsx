@@ -41,7 +41,7 @@ export default function EtudiantDashboard() {
                   <p className="text-sm font-medium text-muted-foreground">Moyenne Globale</p>
                   <div className="flex items-baseline gap-1">
                     <h3 className="text-4xl font-bold tracking-tighter text-foreground">
-                      {dashboard?.averageScore !== undefined ? Math.round(dashboard.averageScore * 100) : '-'}
+                      {dashboard?.averageScore !== undefined ? Math.round(dashboard.averageScore) : '-'}
                     </h3>
                     <span className="text-lg font-medium text-muted-foreground">%</span>
                   </div>
@@ -100,7 +100,8 @@ export default function EtudiantDashboard() {
             ) : (
               <div className="divide-y">
                 {dashboard.recentAttempts.map((attempt) => {
-                  const isSuccess = (attempt.scorePercent || 0) >= 0.6;
+                  // Scores en pourcentage (0–100) côté API
+                  const isSuccess = (attempt.scorePercent || 0) >= 60;
                   return (
                     <div key={attempt.attemptId} className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-slate-50/50 transition-colors px-2 -mx-2 rounded-md">
                       <div className="space-y-1">
@@ -117,7 +118,7 @@ export default function EtudiantDashboard() {
                           <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full border ${isSuccess ? 'bg-green-50 border-green-200' : 'bg-red-50 border-red-200'}`}>
                             {isSuccess ? <CheckCircle2 size={18} className="text-green-600" /> : <XCircle size={18} className="text-red-600" />}
                             <span className={`font-bold ${isSuccess ? 'text-green-700' : 'text-red-700'}`}>
-                              {Math.round((attempt.scorePercent || 0) * 100)}%
+                              {Math.round(attempt.scorePercent || 0)}%
                             </span>
                           </div>
                         ) : (

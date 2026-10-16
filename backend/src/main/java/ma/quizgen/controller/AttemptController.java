@@ -6,10 +6,13 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.quizgen.dto.AttemptDto;
+import ma.quizgen.dto.AttemptReviewDto;
 import ma.quizgen.dto.PageResponse;
+import ma.quizgen.dto.RecommendationDto;
 import ma.quizgen.dto.SubmitAnswersRequest;
 import ma.quizgen.security.CurrentUser;
 import ma.quizgen.service.AttemptService;
+import ma.quizgen.service.ResultsService;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.security.access.prepost.PreAuthorize;
@@ -27,6 +30,7 @@ import java.util.UUID;
 public class AttemptController {
 
     private final AttemptService attemptService;
+    private final ResultsService resultsService;
 
     @PostMapping("/{id}/submit")
     @PreAuthorize("hasRole('ETUDIANT')")
@@ -44,6 +48,24 @@ public class AttemptController {
             @PathVariable UUID id,
             @AuthenticationPrincipal Jwt jwt) {
         return attemptService.getById(id, CurrentUser.getKeycloakId(jwt));
+    }
+
+    @GetMapping("/{id}/review")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Copie corrigée question par question (enseignant de la session)")
+    public AttemptReviewDto review(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return resultsService.attemptReview(id, CurrentUser.getKeycloakId(jwt));
+    }
+
+    @PostMapping("/{id}/recommendation")
+    @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
+    @Operation(summary = "Générer le diagnostic pédagogique IA d'une copie soumise")
+    public RecommendationDto recommendation(
+            @PathVariable UUID id,
+            @AuthenticationPrincipal Jwt jwt) {
+        return resultsService.generateRecommendation(id, CurrentUser.getKeycloakId(jwt));
     }
 
     @GetMapping("/my")

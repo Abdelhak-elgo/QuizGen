@@ -17,6 +17,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Clock, Send } from 'lucide-react';
 import { toast } from 'sonner';
+import { ConfirmDialog } from '@/components/confirm-dialog';
+import { apiErrorMessage } from '@/lib/api-error';
 
 export default function ExamMode() {
   const [match, params] = useRoute('/etudiant/examens/:attemptId');
@@ -88,19 +90,22 @@ export default function ExamMode() {
     }
   };
 
-  const handleSubmit = async () => {
-    if (!confirm("Êtes-vous sûr de vouloir soumettre vos réponses ? Cette action est irréversible.")) return;
-    
+  const [confirmSubmitOpen, setConfirmSubmitOpen] = useState(false);
+
+  const handleSubmit = () => setConfirmSubmitOpen(true);
+
+  const submitAnswers = async () => {
     try {
       await submitAttempt.mutateAsync({
         id: attemptId,
         data: { answers }
       });
-      toast.success("Quiz soumis avec succès !");
-      setLocation(`/etudiant/resultats/${attemptId}`);
     } catch (e) {
-      toast.error("Erreur lors de la soumission");
+      toast.error(apiErrorMessage(e, 'Erreur lors de la soumission'));
+      throw e; // garde la boîte ouverte pour réessayer
     }
+    toast.success("Quiz soumis avec succès !");
+    setLocation(`/etudiant/resultats/${attemptId}`);
   };
 
   const handleAnswer = (qId: string, val: string) => {
@@ -122,6 +127,7 @@ export default function ExamMode() {
   const currentQ = questions[currentIdx];
   const isLast = currentIdx === questions.length - 1;
   const isFirst = currentIdx === 0;
+  const unansweredCount = questions.filter(q => !answers[q.id]?.trim()).length;
 
   const formatTime = (seconds: number) => {
     const h = Math.floor(seconds / 3600);
@@ -296,6 +302,24 @@ export default function ExamMode() {
           </Card>
         </div>
       </main>
+
+      <ConfirmDialog
+        open={confirmSubmitOpen}
+        onOpenChange={setConfirmSubmitOpen}
+        title="Soumettre vos réponses ?"
+        description={
+          <>
+            {unansweredCount > 0 && (
+              <p className="text-amber-700 font-medium mb-1">
+                {unansweredCount} question{unansweredCount > 1 ? 's' : ''} sans réponse.
+              </p>
+            )}
+            <p>Cette action est irréversible : vous ne pourrez plus modifier vos réponses.</p>
+          </>
+        }
+        confirmLabel="Soumettre"
+        onConfirm={submitAnswers}
+      />
     </div>
   );
 }

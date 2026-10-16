@@ -6,6 +6,9 @@ import { Button } from '@/components/ui/button';
 import { ArrowLeft, Target, Users, TrendingUp, AlertTriangle } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
 
+// Question jugée difficile sous ce taux de bonnes réponses (%)
+const HARD_QUESTION_PERCENT = 40;
+
 export default function Analytics() {
   const [match, params] = useRoute('/enseignant/analytics/:quizId');
   const quizId = params?.quizId || '';
@@ -35,14 +38,15 @@ export default function Analytics() {
     );
   }
 
+  // Le backend renvoie déjà des pourcentages (0–100), pas des fractions
   const chartData = analytics.questionStats.map((stat, i) => ({
     name: `Q${i + 1}`,
-    taux: Math.round(stat.correctRate * 100),
+    taux: Math.round(stat.correctRate),
     content: stat.content,
-    isHard: stat.correctRate < 0.4
+    isHard: stat.correctRate < HARD_QUESTION_PERCENT
   }));
 
-  const hardestQuestions = analytics.questionStats.filter(q => q.correctRate < 0.4);
+  const hardestQuestions = analytics.questionStats.filter(q => q.correctRate < HARD_QUESTION_PERCENT);
 
   return (
     <EnseignantLayout>
@@ -77,7 +81,7 @@ export default function Analytics() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Score moyen</p>
-                <h3 className="text-3xl font-bold">{Math.round(analytics.averageScore * 10) / 10} pts</h3>
+                <h3 className="text-3xl font-bold">{Math.round(analytics.averageScore)}%</h3>
               </div>
             </CardContent>
           </Card>
@@ -89,7 +93,7 @@ export default function Analytics() {
               </div>
               <div>
                 <p className="text-sm font-medium text-muted-foreground">Taux de réussite (≥60%)</p>
-                <h3 className="text-3xl font-bold">{Math.round(analytics.successRate * 100)}%</h3>
+                <h3 className="text-3xl font-bold">{Math.round(analytics.successRate)}%</h3>
               </div>
             </CardContent>
           </Card>
@@ -147,7 +151,7 @@ export default function Analytics() {
                     <div key={q.questionId} className="p-3 bg-red-50 border border-red-100 rounded-md">
                       <div className="flex justify-between items-start mb-2">
                         <span className="text-xs font-semibold text-red-800 bg-red-100 px-2 py-0.5 rounded">
-                          {Math.round(q.correctRate * 100)}% de réussite
+                          {Math.round(q.correctRate)}% de réussite
                         </span>
                       </div>
                       <p className="text-sm font-medium text-foreground line-clamp-3">{q.content}</p>

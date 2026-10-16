@@ -548,6 +548,47 @@ export const GetSessionResponse = zod.object({
 
 
 /**
+ * @summary Résultats de la session — statut, score et copie de chaque étudiant (enseignant)
+ */
+export const GetSessionResultsParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetSessionResultsResponse = zod.object({
+  "sessionId": zod.uuid(),
+  "quizId": zod.uuid(),
+  "quizTitle": zod.string(),
+  "nbQuestions": zod.int(),
+  "sessionStatus": zod.enum(['SCHEDULED', 'OPEN', 'CLOSED', 'CANCELLED']),
+  "startTime": zod.coerce.date(),
+  "endTime": zod.coerce.date(),
+  "summary": zod.object({
+  "totalStudents": zod.int(),
+  "notStarted": zod.int(),
+  "inProgress": zod.int(),
+  "submitted": zod.int(),
+  "averagePercent": zod.number().nullish(),
+  "passRate": zod.number().nullish()
+}),
+  "students": zod.array(zod.object({
+  "studentId": zod.uuid(),
+  "firstName": zod.string().nullish(),
+  "lastName": zod.string().nullish(),
+  "email": zod.string(),
+  "assigned": zod.boolean(),
+  "status": zod.enum(['NOT_STARTED', 'IN_PROGRESS', 'SUBMITTED', 'EXPIRED']),
+  "attemptId": zod.uuid().nullish(),
+  "score": zod.int().nullish(),
+  "maxScore": zod.int().nullish(),
+  "percent": zod.number().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "hasRecommendation": zod.boolean()
+}))
+})
+
+
+/**
  * @summary Rejoindre une session (étudiant)
  */
 export const JoinSessionParams = zod.object({
@@ -641,6 +682,69 @@ export const GetAttemptResponse = zod.object({
   "attemptStatus": zod.enum(['IN_PROGRESS', 'SUBMITTED', 'EXPIRED']),
   "startedAt": zod.coerce.date().optional(),
   "completedAt": zod.coerce.date().nullish()
+})
+
+
+/**
+ * @summary Copie corrigée question par question (enseignant de la session)
+ */
+export const GetAttemptReviewParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GetAttemptReviewResponse = zod.object({
+  "attemptId": zod.uuid(),
+  "sessionId": zod.uuid(),
+  "quizId": zod.uuid(),
+  "quizTitle": zod.string(),
+  "studentId": zod.uuid(),
+  "studentName": zod.string(),
+  "studentEmail": zod.string(),
+  "attemptStatus": zod.enum(['IN_PROGRESS', 'SUBMITTED', 'EXPIRED']),
+  "score": zod.int().nullish(),
+  "maxScore": zod.int().nullish(),
+  "percent": zod.number().nullish(),
+  "startedAt": zod.coerce.date().nullish(),
+  "completedAt": zod.coerce.date().nullish(),
+  "questions": zod.array(zod.object({
+  "questionId": zod.uuid(),
+  "position": zod.int(),
+  "type": zod.enum(['QCM', 'OUVERTE', 'EXERCICE']),
+  "content": zod.string(),
+  "options": zod.array(zod.string()).nullish(),
+  "correctAnswer": zod.string(),
+  "studentAnswer": zod.string().nullish(),
+  "outcome": zod.enum(['CORRECT', 'PARTIAL', 'INCORRECT', 'UNANSWERED', 'UNGRADED']),
+  "partialScore": zod.number().nullish(),
+  "explanation": zod.string().nullish()
+})),
+  "recommendation": zod.union([zod.object({
+  "summary": zod.string(),
+  "strengths": zod.array(zod.string()),
+  "weaknesses": zod.array(zod.string()),
+  "focusAreas": zod.array(zod.string()),
+  "actions": zod.array(zod.string()),
+  "model": zod.string().nullish(),
+  "generatedAt": zod.coerce.date().nullish()
+}),zod.null()]).optional()
+})
+
+
+/**
+ * @summary Générer le diagnostic pédagogique IA d'une copie soumise (enseignant)
+ */
+export const GenerateRecommendationParams = zod.object({
+  "id": zod.uuid()
+})
+
+export const GenerateRecommendationResponse = zod.object({
+  "summary": zod.string(),
+  "strengths": zod.array(zod.string()),
+  "weaknesses": zod.array(zod.string()),
+  "focusAreas": zod.array(zod.string()),
+  "actions": zod.array(zod.string()),
+  "model": zod.string().nullish(),
+  "generatedAt": zod.coerce.date().nullish()
 })
 
 

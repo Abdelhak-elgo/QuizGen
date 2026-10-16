@@ -10,6 +10,7 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -26,6 +27,19 @@ public class GlobalExceptionHandler {
         return pd;
     }
 
+    /**
+     * Erreurs métier levées par les services (404, 403, 409…) : leur statut et
+     * leur message sont destinés au client. Sans ce handler, le handler
+     * RuntimeException (plus général) les transformait toutes en 500.
+     */
+    @ExceptionHandler(ResponseStatusException.class)
+    public ProblemDetail handleResponseStatus(ResponseStatusException ex) {
+        ProblemDetail pd = ProblemDetail.forStatus(ex.getStatusCode());
+        pd.setTitle(HttpStatus.valueOf(ex.getStatusCode().value()).getReasonPhrase());
+        pd.setDetail(ex.getReason());
+        return pd;
+    }
+
     @ExceptionHandler(RuntimeException.class)
     public ProblemDetail handleRuntime(RuntimeException ex) {
         // Distinguish between "not found" and generic server errors
@@ -36,10 +50,12 @@ public class GlobalExceptionHandler {
             pd.setDetail(msg);
             return pd;
         }
+        // Détail journalisé côté serveur uniquement : le message d'une exception
+        // inattendue peut exposer des éléments internes (SQL, chemins, hôtes).
         log.error("Erreur interne: {}", msg, ex);
         ProblemDetail pd = ProblemDetail.forStatus(HttpStatus.INTERNAL_SERVER_ERROR);
         pd.setTitle("Erreur serveur");
-        pd.setDetail(msg);
+        pd.setDetail("Une erreur interne est survenue. Réessayez ou contactez l'administrateur.");
         return pd;
     }
 

@@ -18,17 +18,20 @@ from app.celery_app import celery_app
 from app.config import get_settings
 from app.metrics import record_bertscore, record_evidence_retrieved, setup_prometheus
 from app.llm_client import ping_llm
-from app.llm_providers import describe_target
+from app.llm_providers import LlmConfigError, describe_target
 from app.models import (
     BatchScoreRequest,
     BatchScoreResponse,
     GenerateRequest,
     GenerateResponse,
     GeneratedQuestion,
+    Recommendation,
+    RecommendationRequest,
     ScoreRequest,
     ScoreResponse,
     TaskStatus,
 )
+from app.recommendations import generate_recommendation
 from app.rag_store import retrieve_evidence
 from app.tasks import generate_quiz_task
 
@@ -205,6 +208,32 @@ async def cancel_task(task_id: str) -> None:
     """
     celery_app.control.revoke(task_id, terminate=True, signal="SIGTERM")
     logger.info("Tâche %s révoquée", task_id)
+
+
+# ── Recommandations ───────────────────────────────────────────────────────────
+
+@app.post(
+    "/recommendations",
+    response_model=Recommendation,
+    tags=["Recommandations"],
+)
+def recommend(request: RecommendationRequest) -> Recommendation:
+    """
+    Diagnostic pédagogique d'une copie corrigée (anonymisée) : points forts,
+    lacunes, notions à retravailler, actions. Appel LLM synchrone (fonction
+    `def` : exécutée dans le pool de threads, sans bloquer la boucle async).
+    """
+    try:
+        return generate_recommendation(request)
+    except LlmConfigError as exc:
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except httpx.TimeoutException as exc:
+        raise HTTPException(status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+                            detail="Le LLM n'a pas répondu à temps") from exc
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.warning("Recommandation impossible : %s", exc)
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY,
+                            detail=f"Réponse du LLM inexploitable : {exc}") from exc
 
 
 # ── BERTScore ─────────────────────────────────────────────────────────────────

@@ -5,6 +5,7 @@ import ma.quizgen.entity.Document;
 import ma.quizgen.entity.User;
 import ma.quizgen.entity.enums.Role;
 import ma.quizgen.repository.DocumentRepository;
+import ma.quizgen.repository.QuizRepository;
 import ma.quizgen.repository.UserRepository;
 import ma.quizgen.security.CurrentUser;
 import ma.quizgen.service.impl.DocumentServiceImpl;
@@ -17,6 +18,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -32,6 +34,7 @@ import static org.mockito.Mockito.*;
 class DocumentServiceImplTest {
 
     @Mock private DocumentRepository documentRepository;
+    @Mock private QuizRepository     quizRepository;
     @Mock private UserRepository     userRepository;
     @Mock private MinioService       minioService;
     @Mock private CurrentUser        currentUser;
@@ -161,6 +164,26 @@ class DocumentServiceImplTest {
             .isInstanceOf(RuntimeException.class);
 
         verifyNoInteractions(minioService);
+    }
+
+    @Test
+    @DisplayName("deleteDocument — 409 sans toucher au PDF si des quiz utilisent le document")
+    void deleteDocument_shouldRefuse_whenUsedByQuizzes() {
+        UUID docId = UUID.randomUUID();
+        Document doc = Document.builder()
+            .id(docId).user(teacher).originalFilename("cours.pdf")
+            .bucketName("documents").objectKey("documents/" + USER_ID + "/cours.pdf").build();
+
+        when(currentUser.hasRole("ADMIN")).thenReturn(false);
+        when(documentRepository.findByIdAndUser(docId, teacher)).thenReturn(Optional.of(doc));
+        when(quizRepository.existsByDocument_Id(docId)).thenReturn(true);
+
+        assertThatThrownBy(() -> documentService.deleteDocument(docId))
+            .isInstanceOf(ResponseStatusException.class)
+            .hasMessageContaining("utilisé par");
+
+        verifyNoInteractions(minioService);
+        verify(documentRepository, never()).delete(any());
     }
 
     // ── getDocumentById ───────────────────────────────────────────────────────

@@ -11,6 +11,7 @@ import { FileText, Trash2, UploadCloud, BrainCircuit, Download, FilePlus2 } from
 import { toast } from 'sonner';
 import { Link } from 'wouter';
 import { apiErrorMessage } from '@/lib/api-error';
+import { ConfirmDialog } from '@/components/confirm-dialog';
 
 function formatBytes(bytes: number, decimals = 2) {
   if (!+bytes) return '0 Bytes';
@@ -96,15 +97,14 @@ export default function DocumentLibrary() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('Êtes-vous sûr de vouloir supprimer ce document ?')) return;
-    
     try {
       await deleteDoc.mutateAsync({ id });
-      toast.success('Document supprimé.');
-      queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
     } catch (error) {
-      toast.error('Erreur lors de la suppression.');
+      toast.error(apiErrorMessage(error, 'Erreur lors de la suppression.'));
+      throw error; // garde la boîte de confirmation ouverte
     }
+    toast.success('Document supprimé.');
+    queryClient.invalidateQueries({ queryKey: getListDocumentsQueryKey() });
   };
 
   return (
@@ -197,9 +197,24 @@ export default function DocumentLibrary() {
                         </Link>
                       </Button>
                       
-                      <Button variant="ghost" size="icon" className="text-destructive hover:text-destructive hover:bg-destructive/10" onClick={() => handleDelete(doc.id)}>
-                        <Trash2 size={16} />
-                      </Button>
+                      <ConfirmDialog
+                        title="Supprimer ce document ?"
+                        description={
+                          <>
+                            <p>« {doc.originalFilename} » sera définitivement supprimé.</p>
+                            <p className="mt-1">Un document utilisé par un quiz ne peut pas être supprimé.</p>
+                          </>
+                        }
+                        confirmLabel="Supprimer"
+                        destructive
+                        onConfirm={() => handleDelete(doc.id)}
+                        trigger={
+                          <Button variant="ghost" size="icon" title="Supprimer le document"
+                            className="text-destructive hover:text-destructive hover:bg-destructive/10">
+                            <Trash2 size={16} />
+                          </Button>
+                        }
+                      />
                     </div>
                   </div>
                 ))}

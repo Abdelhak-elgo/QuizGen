@@ -24,6 +24,8 @@ public interface QuizRepository extends JpaRepository<Quiz, UUID> {
 
     boolean existsByDocument_IdAndTeacher_Id(UUID documentId, UUID teacherId);
 
+    boolean existsByDocument_Id(UUID documentId);
+
     boolean existsByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(UUID documentId, QuizStatus quizStatus);
 
     List<Quiz> findByDocument_IdAndQuizStatusAndNlpTaskIdIsNotNull(UUID documentId, QuizStatus quizStatus);

@@ -8,6 +8,7 @@ import ma.quizgen.dto.PageResponse;
 import ma.quizgen.entity.Document;
 import ma.quizgen.entity.User;
 import ma.quizgen.repository.DocumentRepository;
+import ma.quizgen.repository.QuizRepository;
 import ma.quizgen.repository.UserRepository;
 import ma.quizgen.security.CurrentUser;
 import ma.quizgen.service.DocumentService;
@@ -15,10 +16,12 @@ import ma.quizgen.service.MinioService;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.UUID;
 
@@ -31,6 +34,7 @@ public class DocumentServiceImpl implements DocumentService {
     private static final String PDF_MIME      = MediaType.APPLICATION_PDF_VALUE;
 
     private final DocumentRepository documentRepository;
+    private final QuizRepository     quizRepository;
     private final UserRepository     userRepository;
     private final MinioService       minioService;
     private final CurrentUser        currentUser;
@@ -117,6 +121,13 @@ public class DocumentServiceImpl implements DocumentService {
     @Transactional
     public void deleteDocument(UUID id) {
         Document doc = resolveDocument(id);
+        // Vérifié AVANT de toucher à MinIO : la contrainte en base (ON DELETE
+        // RESTRICT) échouait après la suppression du PDF, laissant un document
+        // listé mais dont le fichier n'existe plus.
+        if (quizRepository.existsByDocument_Id(id)) {
+            throw new ResponseStatusException(HttpStatus.CONFLICT,
+                "Ce document est utilisé par un ou plusieurs quiz : supprimez d'abord ces quiz");
+        }
         minioService.deleteObject(doc.getBucketName(), doc.getObjectKey());
         documentRepository.delete(doc);
         log.info("Document supprimé: {} (id={})", doc.getOriginalFilename(), id);

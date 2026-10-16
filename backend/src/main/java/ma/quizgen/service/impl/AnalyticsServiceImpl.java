@@ -10,8 +10,8 @@ import ma.quizgen.entity.Attempt;
 import ma.quizgen.entity.Question;
 import ma.quizgen.entity.Quiz;
 import ma.quizgen.entity.User;
+import ma.quizgen.entity.enums.AnswerOutcome;
 import ma.quizgen.entity.enums.AttemptStatus;
-import ma.quizgen.entity.enums.QuestionType;
 import ma.quizgen.repository.AttemptRepository;
 import ma.quizgen.repository.QuizRepository;
 import ma.quizgen.repository.UserRepository;
@@ -129,8 +129,8 @@ public class AnalyticsServiceImpl implements AnalyticsService {
                 String given = a.getAnswers().get(q.getId().toString());
                 if (given != null) {
                     total++;
-                    if (q.getType() == QuestionType.QCM
-                            && given.trim().equalsIgnoreCase(q.getCorrectAnswer().trim())) {
+                    // Même verdict que la correction : QCM exact, ouvertes via l'étiquette BERTScore
+                    if (AnswerGrader.grade(q, given, a.getBertScoreDetails()).outcome() == AnswerOutcome.CORRECT) {
                         correct++;
                     }
                 }
