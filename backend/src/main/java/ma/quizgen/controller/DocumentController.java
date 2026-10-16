@@ -29,7 +29,7 @@ public class DocumentController {
     private final DocumentService documentService;
 
     /**
-     * Upload d'un fichier PDF (max 20 Mo).
+     * Upload d'un fichier PDF (max 50 Mo).
      * Réservé aux ENSEIGNANTS et ADMINS.
      */
     @PostMapping(value = "/upload", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)

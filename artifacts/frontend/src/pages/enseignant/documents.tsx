@@ -26,7 +26,7 @@ function formatBytes(bytes: number, decimals = 2) {
 // plutôt qu'un message générique.
 function uploadErrorMessage(error: unknown): string {
   if (error instanceof ApiError && error.status === 413) {
-    return 'Fichier trop volumineux. La limite est de 20 MB.';
+    return 'Fichier trop volumineux. La limite est de 50 MB.';
   }
   return apiErrorMessage(error, 'Erreur lors de l\'upload du document.');
 }
@@ -75,8 +75,8 @@ export default function DocumentLibrary() {
       toast.error('Format non supporté. Veuillez uploader un fichier PDF.');
       return;
     }
-    if (file.size > 20 * 1024 * 1024) {
-      toast.error('Fichier trop volumineux. La limite est de 20 MB.');
+    if (file.size > 50 * 1024 * 1024) {
+      toast.error('Fichier trop volumineux. La limite est de 50 MB.');
       return;
     }
 
@@ -131,7 +131,7 @@ export default function DocumentLibrary() {
             </div>
             <div className="space-y-1">
               <p className="text-sm font-medium">Glissez-déposez un fichier PDF ici</p>
-              <p className="text-xs text-muted-foreground">ou cliquez pour parcourir (Max 20 MB)</p>
+              <p className="text-xs text-muted-foreground">ou cliquez pour parcourir (Max 50 MB)</p>
             </div>
             <input 
               ref={fileInputRef}
