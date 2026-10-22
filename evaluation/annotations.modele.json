@@ -1,0 +1,98 @@
+{
+  "source": "TITRE DU COURS — ex. Gestion des processus métier (MIAGE, chapitre 3)",
+  "language": "fr",
+  "annotateur": "Prénom NOM",
+  "date_redaction": "AAAA-MM-JJ",
+  "questions": [
+    {
+      "id": "q01",
+      "type": "QCM",
+      "bloom_level": "MEMORISATION",
+      "page": 3,
+      "question": "Énoncé complet de la question, compréhensible sans le document ?",
+      "options": [
+        "Bonne réponse (recopiée à l'identique dans correct_answers)",
+        "Distracteur plausible n°1",
+        "Distracteur plausible n°2",
+        "Distracteur plausible n°3"
+      ],
+      "correct_answers": ["Bonne réponse (recopiée à l'identique dans correct_answers)"]
+    },
+    {
+      "id": "q02",
+      "type": "QCM",
+      "bloom_level": "MEMORISATION",
+      "page": 0,
+      "question": "",
+      "options": ["", "", "", ""],
+      "correct_answers": [""]
+    },
+    {
+      "id": "q03",
+      "type": "QCM",
+      "bloom_level": "COMPREHENSION",
+      "page": 0,
+      "question": "",
+      "options": ["", "", "", ""],
+      "correct_answers": [""]
+    },
+    {
+      "id": "q04",
+      "type": "QCM",
+      "bloom_level": "APPLICATION",
+      "page": 0,
+      "question": "",
+      "options": ["", "", "", ""],
+      "correct_answers": [""]
+    },
+    {
+      "id": "q05",
+      "type": "QCM",
+      "bloom_level": "ANALYSE",
+      "page": 0,
+      "question": "",
+      "options": ["", "", "", ""],
+      "correct_answers": [""]
+    },
+    {
+      "id": "q06",
+      "type": "OUVERTE",
+      "bloom_level": "MEMORISATION",
+      "page": 0,
+      "question": "",
+      "correct_answers": ["Réponse modèle en 1 à 3 phrases, tirée du document."]
+    },
+    {
+      "id": "q07",
+      "type": "OUVERTE",
+      "bloom_level": "COMPREHENSION",
+      "page": 0,
+      "question": "",
+      "correct_answers": [""]
+    },
+    {
+      "id": "q08",
+      "type": "OUVERTE",
+      "bloom_level": "COMPREHENSION",
+      "page": 0,
+      "question": "",
+      "correct_answers": [""]
+    },
+    {
+      "id": "q09",
+      "type": "OUVERTE",
+      "bloom_level": "APPLICATION",
+      "page": 0,
+      "question": "",
+      "correct_answers": [""]
+    },
+    {
+      "id": "q10",
+      "type": "OUVERTE",
+      "bloom_level": "ANALYSE",
+      "page": 0,
+      "question": "",
+      "correct_answers": [""]
+    }
+  ]
+}

@@ -261,21 +261,24 @@ jobs:
         run: pip install --no-cache-dir sacrebleu rouge-score requests
         # bert-score non installe en CI (modele ~1.4 Go) -- mode dry-run
 
-      - name: Run AI quality evaluation (dry-run)
+      # Le runner CI n'a ni stack, ni LLM, ni corpus annoté : ce job vérifie
+      # uniquement que le script et la mise en forme du rapport fonctionnent.
+      # Les données sont SIMULÉES et le rapport est marqué comme tel ; la
+      # mesure réelle se fait en local (evaluation/GUIDE_EVALUATION_REELLE.md).
+      - name: Smoke test du script d'évaluation (données simulées)
         run: |
+          python -m py_compile evaluation/evaluate.py
           python evaluation/evaluate.py \
-            --dry-run \
-            --output evaluation/rapport_qualite_ia.md
+            --dry-run --runs 1 \
+            --output /tmp/rapport_SIMULE.md \
+            --json /tmp/resultats_SIMULES.json
 
-      - name: Upload quality report
+      - name: Upload simulated report (format check only)
         uses: actions/upload-artifact@v4
         with:
-          name: rapport-qualite-ia
-          path: evaluation/rapport_qualite_ia.md
-          retention-days: 30
-
-      - name: Display report summary
-        run: head -30 evaluation/rapport_qualite_ia.md || true
+          name: rapport-qualite-ia-SIMULE
+          path: /tmp/rapport_SIMULE.md
+          retention-days: 7
 
   # ── Job 3 : Test de performance ────────────────────────────────────────────
   performance:

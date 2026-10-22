@@ -21,7 +21,7 @@ evaluation/
 
 Chaque `annotations.json` suit ce schéma :
 
-```json
+```JSON
 {
   "source": "Cours Informatique L3 — Réseaux",
   "language": "fr",
@@ -53,14 +53,16 @@ Chaque `annotations.json` suit ce schéma :
 ## Utilisation
 
 ### Mode démonstration (sans stack Docker)
-```bash
+
+```Shell
 cd /path/to/quizgen
 pip install sacrebleu rouge-score bert-score requests
 python evaluation/evaluate.py --dry-run
 ```
 
 ### Mode complet (avec stack en cours d'exécution)
-```bash
+
+```Shell
 # 1. Obtenir un token Keycloak
 export QUIZGEN_API_TOKEN=$(curl -s \
   http://localhost:8180/realms/quizgen/protocol/openid-connect/token \
@@ -80,19 +82,21 @@ cat evaluation/rapport_qualite_ia.md
 ```
 
 ### Via GitHub Actions
+
 L'évaluation est déclenchée manuellement via `workflow_dispatch` dans le
 job `ai-quality` du workflow `.github/workflows/e2e.yml`.
 
 ## Métriques et seuils
 
-| Métrique      | Description                        | Seuil minimal |
-|---------------|------------------------------------|---------------|
-| BLEU-4        | Précision n-gram jusqu'à 4-gram   | ≥ 0.10        |
-| ROUGE-L       | Rappel séquence la plus longue    | ≥ 0.20        |
-| BERTScore F1  | Similarité sémantique             | ≥ 0.60        |
-| Temps P95     | Temps de génération               | ≤ 15s         |
+| Métrique     | Description                     | Seuil minimal |
+| ------------ | ------------------------------- | ------------- |
+| BLEU-4       | Précision n-gram jusqu'à 4-gram | ≥ 0.10        |
+| ROUGE-L      | Rappel séquence la plus longue  | ≥ 0.20        |
+| BERTScore F1 | Similarité sémantique           | ≥ 0.60        |
+| Temps P95    | Temps de génération             | ≤ 15s         |
 
 > **Note :** Les seuils sont délibérément conservateurs pour la génération
 > automatique de questions (tâche difficile). Le BERTScore est la métrique
 > principale car il capture mieux la qualité sémantique que les métriques
 > basées sur le chevauchement lexical.
+
