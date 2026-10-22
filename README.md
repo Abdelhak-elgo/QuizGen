@@ -356,8 +356,7 @@ QuizGen/
 │   └── realm-export.json       # Realm Keycloak pré-configuré
 ├── lib/
 │   ├── api-spec/openapi.yaml   # Contrat API — source des clients générés (orval)
-│   ├── api-client-react/       # Hooks React Query générés
-│   └── api-zod/                # Schémas Zod générés
+│   └── api-client-react/       # Hooks React Query générés
 ├── scripts/
 │   └── setup-ollama.sh         # Pull du modèle Mistral
 ├── backend/                    # Spring Boot API (Java 21)
