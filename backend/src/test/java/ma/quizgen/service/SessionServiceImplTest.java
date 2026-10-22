@@ -2,6 +2,7 @@ package ma.quizgen.service;
 
 import ma.quizgen.dto.AssignedSessionDto;
 import ma.quizgen.dto.AttemptDto;
+import ma.quizgen.dto.PageResponse;
 import ma.quizgen.dto.SessionCreateRequest;
 import ma.quizgen.dto.SessionDto;
 import ma.quizgen.dto.SessionParticipantDto;
@@ -16,6 +17,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.time.LocalDateTime;
@@ -335,5 +338,44 @@ class SessionServiceImplTest {
         assertThat(result).hasSize(2);
         assertThat(result.get(0).attemptId()).isNull();
         assertThat(result.get(1).attemptStatus()).isEqualTo(AttemptStatus.IN_PROGRESS);
+    }
+
+    // ── listes (enseignant / administrateur) ──────────────────────────────────
+
+    @Test
+    @DisplayName("listForTeacher : seulement les sessions de l'enseignant, avec son nom")
+    void listForTeacher_onlyOwnSessions() {
+        Session session = Session.builder().id(UUID.randomUUID()).quiz(publishedQuiz).teacher(teacher)
+            .startTime(LocalDateTime.now()).endTime(LocalDateTime.now().plusHours(1))
+            .sessionStatus(SessionStatus.OPEN).build();
+        when(userRepository.findByKeycloakId(TEACHER_KC)).thenReturn(Optional.of(teacher));
+        when(sessionRepository.findByTeacher_IdOrderByStartTimeDesc(teacher.getId(), PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(session)));
+
+        PageResponse<SessionDto> result = sessionService.listForTeacher(TEACHER_KC, PageRequest.of(0, 20));
+
+        assertThat(result.content()).singleElement()
+            .satisfies(s -> assertThat(s.teacherName()).isEqualTo("Ahmed Prof"));
+    }
+
+    @Test
+    @DisplayName("listAll : l'administrateur voit les sessions de tous les enseignants")
+    void listAll_returnsSessionsOfEveryTeacher() {
+        User otherTeacher = User.builder().id(UUID.randomUUID()).keycloakId("kc-other")
+            .firstName("Leila").lastName("Autre").role(Role.ENSEIGNANT).build();
+        Session mine = Session.builder().id(UUID.randomUUID()).quiz(publishedQuiz).teacher(teacher)
+            .startTime(LocalDateTime.now()).endTime(LocalDateTime.now().plusHours(1))
+            .sessionStatus(SessionStatus.OPEN).build();
+        Session theirs = Session.builder().id(UUID.randomUUID()).quiz(publishedQuiz).teacher(otherTeacher)
+            .startTime(LocalDateTime.now().minusDays(1)).endTime(LocalDateTime.now().minusHours(20))
+            .sessionStatus(SessionStatus.CLOSED).build();
+        when(sessionRepository.findAllByOrderByStartTimeDesc(PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(mine, theirs)));
+
+        PageResponse<SessionDto> result = sessionService.listAll(PageRequest.of(0, 20));
+
+        assertThat(result.content()).extracting(SessionDto::teacherName)
+            .containsExactly("Ahmed Prof", "Leila Autre");
+        verifyNoInteractions(userRepository);
     }
 }

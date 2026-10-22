@@ -261,12 +261,29 @@ public class QuizServiceImpl implements QuizService {
 
     @Override
     @Transactional
-    public PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, Pageable pageable) {
+    public PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, QuizStatus status, Pageable pageable) {
         User teacher = resolveUser(teacherKeycloakId);
-        Page<Quiz> page = quizRepository.findByTeacher_IdOrderByCreatedAtDesc(teacher.getId(), pageable);
-        // Les générations en cours sont rafraîchies ici aussi : sans cela, un quiz
-        // dont l'enseignant a quitté la page de génération resterait « Brouillon »
-        // dans la liste tant que personne ne l'ouvre.
+        Page<Quiz> page = status == null
+            ? quizRepository.findByTeacher_IdOrderByCreatedAtDesc(teacher.getId(), pageable)
+            : quizRepository.findByTeacher_IdAndQuizStatusOrderByCreatedAtDesc(teacher.getId(), status, pageable);
+        return toRefreshedPage(page);
+    }
+
+    @Override
+    @Transactional
+    public PageResponse<QuizDto> listAll(QuizStatus status, Pageable pageable) {
+        Page<Quiz> page = status == null
+            ? quizRepository.findAllByOrderByCreatedAtDesc(pageable)
+            : quizRepository.findByQuizStatusOrderByCreatedAtDesc(status, pageable);
+        return toRefreshedPage(page);
+    }
+
+    /**
+     * Les générations en cours sont rafraîchies à chaque liste : sans cela, un quiz
+     * dont l'enseignant a quitté la page de génération resterait « Brouillon »
+     * dans la liste tant que personne ne l'ouvre.
+     */
+    private PageResponse<QuizDto> toRefreshedPage(Page<Quiz> page) {
         page.getContent().stream().filter(QuizServiceImpl::isGenerating).forEach(this::advanceIfNlpDone);
         return PageResponse.of(page.map(QuizDto::from));
     }

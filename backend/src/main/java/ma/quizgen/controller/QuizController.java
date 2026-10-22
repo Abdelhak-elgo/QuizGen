@@ -6,6 +6,7 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import ma.quizgen.dto.*;
+import ma.quizgen.entity.enums.QuizStatus;
 import ma.quizgen.security.CurrentUser;
 import ma.quizgen.service.MoodleExportService;
 import ma.quizgen.service.QuizService;
@@ -18,6 +19,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -31,6 +33,8 @@ import java.util.UUID;
 @Tag(name = "Quiz", description = "Création, gestion et export des quiz pédagogiques")
 @SecurityRequirement(name = "bearerAuth")
 public class QuizController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final QuizService         quizService;
     private final ScormExportService  scormExportService;
@@ -67,14 +71,18 @@ public class QuizController {
 
     @GetMapping
     @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
-    @Operation(summary = "Liste paginée des quiz de l'enseignant connecté")
+    @Operation(summary = "Liste paginée des quiz : ceux de l'enseignant connecté, tous les quiz pour un administrateur")
     public PageResponse<QuizDto> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @AuthenticationPrincipal Jwt jwt) {
-        return quizService.listForTeacher(
-            CurrentUser.getKeycloakId(jwt),
-            PageRequest.of(page, size, Sort.by("createdAt").descending()));
+            @RequestParam(required = false) QuizStatus status,
+            @AuthenticationPrincipal Jwt jwt,
+            Authentication authentication) {
+        PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, MAX_PAGE_SIZE),
+            Sort.by("createdAt").descending());
+        return CurrentUser.isAdmin(authentication)
+            ? quizService.listAll(status, pageable)
+            : quizService.listForTeacher(CurrentUser.getKeycloakId(jwt), status, pageable);
     }
 
     @PutMapping("/{id}/questions")

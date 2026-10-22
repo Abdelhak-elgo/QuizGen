@@ -13,6 +13,7 @@ import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.web.bind.annotation.*;
@@ -26,6 +27,8 @@ import java.util.UUID;
 @Tag(name = "Sessions", description = "Gestion des sessions d'examen")
 @SecurityRequirement(name = "bearerAuth")
 public class SessionController {
+
+    private static final int MAX_PAGE_SIZE = 100;
 
     private final SessionService sessionService;
     private final ResultsService resultsService;
@@ -48,14 +51,17 @@ public class SessionController {
 
     @GetMapping
     @PreAuthorize("hasRole('ENSEIGNANT') or hasRole('ADMIN')")
-    @Operation(summary = "Liste paginée des sessions de l'enseignant connecté")
+    @Operation(summary = "Liste paginée des sessions : celles de l'enseignant connecté, toutes pour un administrateur")
     public PageResponse<SessionDto> list(
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size,
-            @AuthenticationPrincipal Jwt jwt) {
-        return sessionService.listForTeacher(
-            CurrentUser.getKeycloakId(jwt),
-            PageRequest.of(page, size, Sort.by("startTime").descending()));
+            @AuthenticationPrincipal Jwt jwt,
+            Authentication authentication) {
+        PageRequest pageable = PageRequest.of(Math.max(page, 0), Math.clamp(size, 1, MAX_PAGE_SIZE),
+            Sort.by("startTime").descending());
+        return CurrentUser.isAdmin(authentication)
+            ? sessionService.listAll(pageable)
+            : sessionService.listForTeacher(CurrentUser.getKeycloakId(jwt), pageable);
     }
 
     @PostMapping("/{id}/join")

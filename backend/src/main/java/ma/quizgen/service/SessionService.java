@@ -18,6 +18,9 @@ public interface SessionService {
 
     PageResponse<SessionDto> listForTeacher(String teacherKeycloakId, Pageable pageable);
 
+    /** Toutes les sessions de la plateforme (administrateur). */
+    PageResponse<SessionDto> listAll(Pageable pageable);
+
     /**
      * Rejoint la session et crée un Attempt. Session avec participants : réservée
      * aux étudiants assignés (sans code) ; sinon, code d'accès éventuel requis.

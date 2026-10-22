@@ -864,7 +864,7 @@ export const getListQuizzesUrl = (params?: ListQuizzesParams,) => {
 }
 
 /**
- * @summary Mes quiz
+ * @summary Quiz de l'enseignant connecté (tous les quiz pour un administrateur)
  */
 export const listQuizzes = async (params?: ListQuizzesParams, options?: Parameters<typeof customFetch>[1]): Promise<QuizPage> => {
 
@@ -911,7 +911,7 @@ export type ListQuizzesQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Mes quiz
+ * @summary Quiz de l'enseignant connecté (tous les quiz pour un administrateur)
  */
 
 export function useListQuizzes<TData = Awaited<ReturnType<typeof listQuizzes>>, TError = ErrorType<unknown>>(
@@ -1310,7 +1310,7 @@ export const getListSessionsUrl = (params?: ListSessionsParams,) => {
 }
 
 /**
- * @summary Mes sessions
+ * @summary Sessions de l'enseignant connecté (toutes les sessions pour un administrateur)
  */
 export const listSessions = async (params?: ListSessionsParams, options?: Parameters<typeof customFetch>[1]): Promise<SessionPage> => {
 
@@ -1357,7 +1357,7 @@ export type ListSessionsQueryError = ErrorType<unknown>
 
 
 /**
- * @summary Mes sessions
+ * @summary Sessions de l'enseignant connecté (toutes les sessions pour un administrateur)
  */
 
 export function useListSessions<TData = Awaited<ReturnType<typeof listSessions>>, TError = ErrorType<unknown>>(

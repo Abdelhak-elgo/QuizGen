@@ -16,7 +16,11 @@ public interface QuizRepository extends JpaRepository<Quiz, UUID> {
 
     Page<Quiz> findByTeacher_IdOrderByCreatedAtDesc(UUID teacherId, Pageable pageable);
 
+    Page<Quiz> findByTeacher_IdAndQuizStatusOrderByCreatedAtDesc(UUID teacherId, QuizStatus status, Pageable pageable);
+
     Page<Quiz> findByQuizStatusOrderByCreatedAtDesc(QuizStatus status, Pageable pageable);
+
+    Page<Quiz> findAllByOrderByCreatedAtDesc(Pageable pageable);
 
     // LEFT JOIN : un quiz en cours de génération (DRAFT) n'a encore aucune question
     @Query("SELECT q FROM Quiz q LEFT JOIN FETCH q.questions WHERE q.id = :id")

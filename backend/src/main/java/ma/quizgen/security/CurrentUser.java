@@ -1,5 +1,6 @@
 package ma.quizgen.security;
 
+import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.stereotype.Component;
@@ -52,5 +53,11 @@ public class CurrentUser {
      */
     public static String getKeycloakId(Jwt jwt) {
         return jwt.getSubject();
+    }
+
+    /** Vrai si l'utilisateur authentifié porte le rôle ADMIN (vue globale de la plateforme). */
+    public static boolean isAdmin(Authentication authentication) {
+        return authentication != null && authentication.getAuthorities().stream()
+            .anyMatch(a -> "ROLE_ADMIN".equals(a.getAuthority()));
     }
 }

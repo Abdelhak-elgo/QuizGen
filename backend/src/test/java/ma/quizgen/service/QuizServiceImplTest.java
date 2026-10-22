@@ -447,6 +447,55 @@ class QuizServiceImplTest {
         assertThat(result.totalElements()).isEqualTo(1);
     }
 
+    @Test
+    @DisplayName("listForTeacher : filtre sur le statut demandé, sans sortir des quiz de l'enseignant")
+    void listForTeacher_filtersByStatus() {
+        Quiz published = draftQuiz(LocalDateTime.now());
+        published.setQuizStatus(QuizStatus.PUBLISHED);
+        when(userRepository.findByKeycloakId(TEACHER_KC_ID)).thenReturn(Optional.of(teacher));
+        when(quizRepository.findByTeacher_IdAndQuizStatusOrderByCreatedAtDesc(
+                teacher.getId(), QuizStatus.PUBLISHED, PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(published)));
+
+        PageResponse<QuizDto> result =
+            quizService.listForTeacher(TEACHER_KC_ID, QuizStatus.PUBLISHED, PageRequest.of(0, 20));
+
+        assertThat(result.content()).extracting(QuizDto::quizStatus).containsExactly(QuizStatus.PUBLISHED);
+        verify(quizRepository, never()).findByTeacher_IdOrderByCreatedAtDesc(any(), any());
+    }
+
+    @Test
+    @DisplayName("listAll : l'administrateur voit les quiz de tous les enseignants")
+    void listAll_returnsQuizzesOfEveryTeacher() {
+        User otherTeacher = User.builder().id(UUID.randomUUID()).keycloakId("kc-other")
+            .firstName("Leila").lastName("Autre").role(Role.ENSEIGNANT).build();
+        Quiz mine = draftQuiz(LocalDateTime.now());
+        mine.setQuizStatus(QuizStatus.PUBLISHED);
+        Quiz theirs = Quiz.builder().id(UUID.randomUUID()).document(document).teacher(otherTeacher)
+            .title("Quiz de Leila").difficulty(Difficulty.FACILE).nbQuestions(3)
+            .quizStatus(QuizStatus.REVIEWING).build();
+        when(quizRepository.findAllByOrderByCreatedAtDesc(PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of(mine, theirs)));
+
+        PageResponse<QuizDto> result = quizService.listAll(null, PageRequest.of(0, 20));
+
+        assertThat(result.content()).extracting(QuizDto::teacherName)
+            .containsExactly("Ahmed Enseignant", "Leila Autre");
+        verifyNoInteractions(userRepository);
+    }
+
+    @Test
+    @DisplayName("listAll : filtre sur le statut demandé")
+    void listAll_filtersByStatus() {
+        when(quizRepository.findByQuizStatusOrderByCreatedAtDesc(QuizStatus.FAILED, PageRequest.of(0, 20)))
+            .thenReturn(new PageImpl<>(List.of()));
+
+        PageResponse<QuizDto> result = quizService.listAll(QuizStatus.FAILED, PageRequest.of(0, 20));
+
+        assertThat(result.content()).isEmpty();
+        verify(quizRepository, never()).findAllByOrderByCreatedAtDesc(any());
+    }
+
     // ── quiz inachevé : liste, relance, édition, suppression ──────────────────
 
     @Test

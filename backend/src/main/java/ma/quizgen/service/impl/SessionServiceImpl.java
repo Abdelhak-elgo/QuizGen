@@ -144,6 +144,12 @@ public class SessionServiceImpl implements SessionService {
     }
 
     @Override
+    @Transactional(readOnly = true)
+    public PageResponse<SessionDto> listAll(Pageable pageable) {
+        return PageResponse.of(sessionRepository.findAllByOrderByStartTimeDesc(pageable).map(SessionDto::from));
+    }
+
+    @Override
     @Transactional
     public AttemptDto join(UUID sessionId, String accessCode, String studentKeycloakId) {
         Session session = sessionRepository.findById(sessionId)

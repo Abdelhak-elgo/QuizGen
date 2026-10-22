@@ -17,6 +17,8 @@ public interface SessionRepository extends JpaRepository<Session, UUID> {
 
     Page<Session> findByTeacher_IdOrderByStartTimeDesc(UUID teacherId, Pageable pageable);
 
+    Page<Session> findAllByOrderByStartTimeDesc(Pageable pageable);
+
     Optional<Session> findByAccessCodeAndSessionStatus(String accessCode, SessionStatus status);
 
     @Query("SELECT s FROM Session s WHERE s.sessionStatus = 'SCHEDULED' AND s.startTime <= :now")

@@ -177,10 +177,11 @@ paths:
     get:
       operationId: listQuizzes
       tags: [quizzes]
-      summary: Mes quiz
+      summary: Quiz de l'enseignant connecté (tous les quiz pour un administrateur)
       parameters:
         - { name: page, in: query, schema: { type: integer, default: 0 } }
         - { name: size, in: query, schema: { type: integer, default: 10 } }
+        - { name: status, in: query, required: false, schema: { type: string, enum: [DRAFT, REVIEWING, PUBLISHED, ARCHIVED, FAILED] } }
       responses:
         "200":
           description: Paginated quizzes
@@ -271,7 +272,7 @@ paths:
     get:
       operationId: listSessions
       tags: [sessions]
-      summary: Mes sessions
+      summary: Sessions de l'enseignant connecté (toutes les sessions pour un administrateur)
       parameters:
         - { name: page, in: query, schema: { type: integer, default: 0 } }
         - { name: size, in: query, schema: { type: integer, default: 10 } }
@@ -682,6 +683,7 @@ components:
         quizId: { type: string, format: uuid }
         quizTitle: { type: string }
         teacherId: { type: string, format: uuid }
+        teacherName: { type: string }
         startTime: { type: string, format: date-time }
         endTime: { type: string, format: date-time }
         accessCode: { type: ["string", "null"] }

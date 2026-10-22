@@ -1,7 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { 
-  BookOpen, 
+  BookOpen,
+  FileText,
+  PlayCircle,
   Users,
   LogOut, 
   Menu
@@ -39,14 +41,38 @@ export function AdminLayout({ children }: { children: React.ReactNode }) {
           <SidebarContent className="px-3 py-2">
             <SidebarMenu>
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={location === '/admin' || location.startsWith('/admin')}
+                <SidebarMenuButton
+                  asChild
+                  isActive={location === '/admin'}
                   tooltip="Utilisateurs"
                 >
                   <Link href="/admin" className="flex items-center gap-3">
                     <Users size={18} />
                     <span>Utilisateurs</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith('/admin/quizzes')}
+                  tooltip="Quiz"
+                >
+                  <Link href="/admin/quizzes" className="flex items-center gap-3">
+                    <FileText size={18} />
+                    <span>Quiz</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith('/admin/sessions')}
+                  tooltip="Sessions"
+                >
+                  <Link href="/admin/sessions" className="flex items-center gap-3">
+                    <PlayCircle size={18} />
+                    <span>Sessions</span>
                   </Link>
                 </SidebarMenuButton>
               </SidebarMenuItem>

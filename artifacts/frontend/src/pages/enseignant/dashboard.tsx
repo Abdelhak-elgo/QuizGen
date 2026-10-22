@@ -4,7 +4,9 @@ import { EnseignantLayout } from '@/components/layout/enseignant-layout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { FileText, Loader2, PlayCircle, Plus, Users } from 'lucide-react';
+import { QuizStatusBadge } from '@/components/quiz/quiz-status-badge';
+import { SessionStatusBadge } from '@/components/session/session-status-badge';
+import { FileText, PlayCircle, Plus, Users } from 'lucide-react';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
 
@@ -25,34 +27,6 @@ export default function EnseignantDashboard() {
 
   const quizzes = quizzesData?.content || [];
   const sessions = sessionsData?.content || [];
-
-  const getStatusBadge = (status: string, isGenerating: boolean) => {
-    if (isGenerating) {
-      return (
-        <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-          <Loader2 size={11} className="animate-spin mr-1" /> Génération…
-        </Badge>
-      );
-    }
-    switch (status) {
-      case 'DRAFT': return <Badge variant="secondary">Brouillon</Badge>;
-      case 'FAILED': return <Badge variant="outline" className="bg-red-50 text-red-700 border-red-200">Échec</Badge>;
-      case 'REVIEWING': return<Badge variant="outline" className="bg-yellow-50 text-yellow-700 border-yellow-200">En révision</Badge>;
-      case 'PUBLISHED': return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Publié</Badge>;
-      case 'ARCHIVED': return <Badge variant="secondary" className="opacity-50">Archivé</Badge>;
-      default: return <Badge>{status}</Badge>;
-    }
-  };
-
-  const getSessionBadge = (status: string) => {
-    switch (status) {
-      case 'SCHEDULED': return <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">Planifié</Badge>;
-      case 'OPEN': return <Badge variant="default" className="bg-green-600 hover:bg-green-700">Ouvert</Badge>;
-      case 'CLOSED': return <Badge variant="secondary">Fermé</Badge>;
-      case 'CANCELLED': return <Badge variant="destructive">Annulé</Badge>;
-      default: return <Badge>{status}</Badge>;
-    }
-  };
 
   return (
     <EnseignantLayout>
@@ -82,7 +56,10 @@ export default function EnseignantDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">Quiz Récents</CardTitle>
-                  <CardDescription>Vos dernières créations de quiz</CardDescription>
+                  <CardDescription>
+                    Vos dernières créations de quiz ·{' '}
+                    <Link href="/enseignant/quizzes" className="text-primary hover:underline">Voir tout</Link>
+                  </CardDescription>
                 </div>
                 <div className="p-2 bg-primary/10 rounded-md text-primary">
                   <FileText size={20} />
@@ -127,7 +104,7 @@ export default function EnseignantDashboard() {
                         </div>
                       </div>
                       <div className="shrink-0">
-                        {getStatusBadge(quiz.quizStatus, quiz.quizStatus === 'DRAFT' && !!quiz.nlpTaskId)}
+                        <QuizStatusBadge status={quiz.quizStatus} isGenerating={quiz.quizStatus === 'DRAFT' && !!quiz.nlpTaskId} />
                       </div>
                     </div>
                   ))}
@@ -142,7 +119,10 @@ export default function EnseignantDashboard() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle className="text-lg">Sessions Récentes</CardTitle>
-                  <CardDescription>Vos évaluations en cours et planifiées</CardDescription>
+                  <CardDescription>
+                    Vos évaluations en cours et planifiées ·{' '}
+                    <Link href="/enseignant/sessions" className="text-primary hover:underline">Voir tout</Link>
+                  </CardDescription>
                 </div>
                 <div className="p-2 bg-primary/10 rounded-md text-primary">
                   <PlayCircle size={20} />
@@ -185,7 +165,7 @@ export default function EnseignantDashboard() {
                         </div>
                       </div>
                       <div className="shrink-0">
-                        {getSessionBadge(session.sessionStatus)}
+                        <SessionStatusBadge status={session.sessionStatus} />
                       </div>
                     </div>
                   ))}

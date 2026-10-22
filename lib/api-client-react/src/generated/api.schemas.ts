@@ -255,6 +255,7 @@ export interface Session {
   quizId: string;
   quizTitle: string;
   teacherId?: string;
+  teacherName?: string;
   startTime: string;
   endTime: string;
   /** @nullable */
@@ -578,7 +579,19 @@ size?: number;
 export type ListQuizzesParams = {
 page?: number;
 size?: number;
+status?: ListQuizzesStatus;
 };
+
+export type ListQuizzesStatus = typeof ListQuizzesStatus[keyof typeof ListQuizzesStatus];
+
+
+export const ListQuizzesStatus = {
+  DRAFT: 'DRAFT',
+  REVIEWING: 'REVIEWING',
+  PUBLISHED: 'PUBLISHED',
+  ARCHIVED: 'ARCHIVED',
+  FAILED: 'FAILED',
+} as const;
 
 export type ListSessionsParams = {
 page?: number;

@@ -1,8 +1,9 @@
 import React from 'react';
 import { Link, useLocation } from 'wouter';
 import { 
-  BookOpen, 
-  Files, 
+  BookOpen,
+  FileText,
+  Files,
   LayoutDashboard, 
   LogOut, 
   PlayCircle,
@@ -65,9 +66,21 @@ export function EnseignantLayout({ children }: { children: React.ReactNode }) {
                 </SidebarMenuButton>
               </SidebarMenuItem>
               <SidebarMenuItem>
-                <SidebarMenuButton 
-                  asChild 
-                  isActive={location.startsWith('/enseignant/sessions')}
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith('/enseignant/quizzes') || location.startsWith('/enseignant/analytics')}
+                  tooltip="Quiz"
+                >
+                  <Link href="/enseignant/quizzes" className="flex items-center gap-3">
+                    <FileText size={18} />
+                    <span>Quiz</span>
+                  </Link>
+                </SidebarMenuButton>
+              </SidebarMenuItem>
+              <SidebarMenuItem>
+                <SidebarMenuButton
+                  asChild
+                  isActive={location.startsWith('/enseignant/sessions') || location.startsWith('/enseignant/copies')}
                   tooltip="Sessions"
                 >
                   <Link href="/enseignant/sessions" className="flex items-center gap-3">

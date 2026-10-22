@@ -4,6 +4,7 @@ import ma.quizgen.dto.PageResponse;
 import ma.quizgen.dto.QuizCreateRequest;
 import ma.quizgen.dto.QuizDto;
 import ma.quizgen.dto.QuizUpdateQuestionsRequest;
+import ma.quizgen.entity.enums.QuizStatus;
 import org.springframework.data.domain.Pageable;
 
 import java.util.UUID;
@@ -18,7 +19,15 @@ public interface QuizService {
 
     QuizDto getById(UUID quizId, String requesterKeycloakId);
 
-    PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, Pageable pageable);
+    default PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, Pageable pageable) {
+        return listForTeacher(teacherKeycloakId, null, pageable);
+    }
+
+    /** Quiz de l'enseignant, éventuellement filtrés par statut (null = tous). */
+    PageResponse<QuizDto> listForTeacher(String teacherKeycloakId, QuizStatus status, Pageable pageable);
+
+    /** Tous les quiz de la plateforme (administrateur), éventuellement filtrés par statut. */
+    PageResponse<QuizDto> listAll(QuizStatus status, Pageable pageable);
 
     /** Édite / valide les questions générées et publie si demandé. */
     QuizDto updateQuestions(UUID quizId, QuizUpdateQuestionsRequest request, String teacherKeycloakId);

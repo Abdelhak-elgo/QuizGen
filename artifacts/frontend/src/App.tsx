@@ -17,10 +17,13 @@ import Login from '@/pages/login';
 
 // Admin Pages
 import AdminDashboard from '@/pages/admin/dashboard';
+import AdminQuizzes from '@/pages/admin/quizzes';
+import AdminSessions from '@/pages/admin/sessions';
 
 // Enseignant Pages
 import EnseignantDashboard from '@/pages/enseignant/dashboard';
 import DocumentLibrary from '@/pages/enseignant/documents';
+import QuizzesList from '@/pages/enseignant/quizzes';
 import QuizNew from '@/pages/enseignant/quiz-new';
 import QuizEditor from '@/pages/enseignant/quiz-editor';
 import SessionsList from '@/pages/enseignant/sessions';
@@ -49,6 +52,12 @@ function Router() {
         <Route path="/admin">
           <AdminGuard><SyncUserGuard><AdminDashboard /></SyncUserGuard></AdminGuard>
         </Route>
+        <Route path="/admin/quizzes">
+          <AdminGuard><SyncUserGuard><AdminQuizzes /></SyncUserGuard></AdminGuard>
+        </Route>
+        <Route path="/admin/sessions">
+          <AdminGuard><SyncUserGuard><AdminSessions /></SyncUserGuard></AdminGuard>
+        </Route>
         
         {/* Enseignant Routes */}
         <Route path="/enseignant">
@@ -56,6 +65,9 @@ function Router() {
         </Route>
         <Route path="/enseignant/documents">
           <EnseignantGuard><SyncUserGuard><DocumentLibrary /></SyncUserGuard></EnseignantGuard>
+        </Route>
+        <Route path="/enseignant/quizzes">
+          <EnseignantGuard><SyncUserGuard><QuizzesList /></SyncUserGuard></EnseignantGuard>
         </Route>
         <Route path="/enseignant/quizzes/new">
           <EnseignantGuard><SyncUserGuard><QuizNew /></SyncUserGuard></EnseignantGuard>
