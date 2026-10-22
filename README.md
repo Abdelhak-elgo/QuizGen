@@ -85,12 +85,12 @@ En mode en ligne, rien à télécharger.
 
 Tout se règle dans `.env` (voir `.env.example`), puis `docker compose up -d` :
 
-| Variable           | Rôle                                                                  |
-| ------------------ | --------------------------------------------------------------------- |
-| `LLM_MODE`         | `offline` (Ollama) ou `online` (API distante)                         |
-| `LLM_MODEL`        | Modèle en ligne, ex. `claude-haiku-4-5-20251001`, `gpt-4o-mini`       |
-| `LLM_API_KEY`      | Clé de l'API en ligne (jamais commitée : `.env` est ignoré par git)   |
-| `LLM_API_BASE_URL` | Point d'accès : détermine le protocole utilisé (tableau ci-dessous)   |
+| Variable           | Rôle                                                                                                               |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------ |
+| `LLM_MODE`         | `offline` (Ollama) ou `online` (API distante)                                                                      |
+| `LLM_MODEL`        | Modèle en ligne, ex. `claude-haiku-4-5-20251001`, `gpt-4o-mini`                                                    |
+| `LLM_API_KEY`      | Clé de l'API en ligne (jamais commitée : `.env` est ignoré par git)                                                |
+| `LLM_API_BASE_URL` | Point d'accès : détermine le protocole utilisé (tableau ci-dessous)                                                |
 | `COMPOSE_PROFILES` | `offline` démarre les conteneurs Ollama ; toute autre valeur (ex. `online`) les laisse arrêtés et économise la RAM |
 
 | Fournisseur               | `LLM_API_BASE_URL`                    | Protocole                    |
@@ -127,12 +127,12 @@ ne pas démarrer le conteneur Ollama.
 
 ## 📝 Cycle de vie d'un quiz
 
-| Statut      | Signification                                                                  |
-| ----------- | ------------------------------------------------------------------------------ |
-| `DRAFT`     | Génération en cours (asynchrone : l'enseignant peut quitter la page)           |
-| `REVIEWING` | Questions générées, à relire / modifier avant publication                      |
-| `PUBLISHED` | Publié : utilisable dans des sessions, exports SCORM / Moodle                  |
-| `FAILED`    | Génération échouée, sans question exploitable, ou sans résultat après 40 min   |
+| Statut      | Signification                                                                |
+| ----------- | ---------------------------------------------------------------------------- |
+| `DRAFT`     | Génération en cours (asynchrone : l'enseignant peut quitter la page)         |
+| `REVIEWING` | Questions générées, à relire / modifier avant publication                    |
+| `PUBLISHED` | Publié : utilisable dans des sessions, exports SCORM / Moodle                |
+| `FAILED`    | Génération échouée, sans question exploitable, ou sans résultat après 40 min |
 
 * Si le LLM rend moins de questions que demandé (filtre qualité, doublons), le
   pipeline relance jusqu'à 2 tours d'appels complémentaires sur d'autres segments
