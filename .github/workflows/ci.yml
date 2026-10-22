@@ -104,8 +104,10 @@ jobs:
       - name: Install NLP dependencies (sans torch/bert-score)
         working-directory: nlp-service
         run: |
-          # Installer les deps legeres seulement (torch ~2 Go = trop lent en CI)
-          pip install --no-cache-dir \
+          # Installer les deps legeres seulement (torch ~2 Go = trop lent en CI).
+          # Pas de --no-cache-dir : setup-python (cache: pip) doit trouver
+          # ~/.cache/pip a la fin du job, sinon son etape « Post » echoue.
+          pip install \
             fastapi==0.115.0 \
             uvicorn==0.30.6 \
             pydantic==2.8.2 \
@@ -132,7 +134,8 @@ jobs:
         if: always()
         with:
           name: nlp-test-results
-          path: nlp-service/.pytest_cache/
+          # Rapport de couverture écrit par pytest-cov (cf. pytest.ini)
+          path: nlp-service/coverage.xml
           retention-days: 7
 
   # ── Job 3 : Analyse SonarQube ────────────────────────────────────────────────
